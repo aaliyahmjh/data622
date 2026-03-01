@@ -8,7 +8,7 @@
 
 ## Interface
 
-Shiny / Streamlit
+Shiny
 
 ## Data Sources
 
