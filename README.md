@@ -34,7 +34,7 @@ Interactive visualizations will display patterns such as salary distribution acr
 
 ## Interface
 
-The application will be developed using **Shiny (R)**.
+The application will be developed using **Shiny App**.
 
 ## Data Sources
 
