@@ -1,8 +1,11 @@
 # Final Project Proposal
 
 Predicting NYC Public Employee Salaries Using Machine Learning
+
 **Team Members:** Aaliyah John-Harry, Kevin Havis, Mehreen Ali Gillani, Miraj Patel 
+
 Machine Learning and Big Data (DATA-622-Spring-2026) 
+
 **Supervised By:** Prof. George Hagstrom 
 
 ## Project Overview
