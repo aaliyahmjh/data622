@@ -8,6 +8,30 @@ Machine Learning and Big Data (DATA-622-Spring-2026)
 
 **Supervised By:** Prof. George Hagstrom 
 
+## Directory Structure
+
+```
+data622/
+├── data/
+│   ├── raw/          # Raw data — never edit directly
+│   ├── interim/      # Intermediate data, not yet model-ready
+│   └── processed/    # Final model-ready data
+├── models/           # Saved trained models
+├── notebooks/
+│   ├── exploratory/  # EDA and experimentation notebooks
+│   └── presentation/ # Polished, presentable notebooks
+├── references/       # Data dictionaries and reference materials
+├── scripts/          # Scripts to run full pipelines
+└── src/data622/      # Source package
+    ├── app.py        # Shiny web application
+    ├── config.py     # Project constants and configuration
+    ├── dataset.py    # Data loading and preprocessing
+    ├── features.py   # Feature engineering
+    ├── paths.py      # Centralized path definitions
+    ├── predict.py    # Model inference
+    └── train.py      # Model training
+```
+
 ## Project Overview
 
 This proposal outlines the development of a machine learning-powered web application designed to predict salaries for New York City public employees. Leveraging a decade of publicly available payroll data, the application will serve as a transparency tool for job seekers, current employees, researchers, and policymakers. The project will involve training regression models to estimate annual salaries based on job characteristics and tenure, and deploying these models within an interactive Shiny dashboard.
