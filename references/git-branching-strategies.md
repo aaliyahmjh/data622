@@ -11,11 +11,11 @@ One branch per module or task, merged into `main` via pull request.
 ### Structure
 ```
 main
-├── feature/dataset
-├── feature/features
-├── feature/train
-├── feature/predict
-└── feature/app
+├── feature/dataset  # Aali / Mehreen - Setting up the raw data and any basic cleaning / preprocessing
+├── feature/features # Aali / Mehreen - Feature selection & engineering, including scaling
+├── feature/train    # Mehreen Setting up models and saving trained models down
+├── feature/predict  # Miraj Ingesting new data, preprocessing it, and saving results / metrics
+└── feature/app      # Kevin - Shiny App for UI
 ```
 
 ### Example Workflow
