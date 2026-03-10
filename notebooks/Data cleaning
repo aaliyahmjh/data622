@@ -1,0 +1,581 @@
+### DATA CLEANING input file: Citywide_Payroll_Data__Fiscal_Year__20251009.csv - NYC Open Data
+### output file: nyc_annual_salary_employees_payBasis_perAnuum.csv
+### Author: Mehreen Ali Gillani
+
+# import libraries
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib as plt
+
+# load the data
+df_original = pd.read_csv('/Users/mehreen.gillaniicloud.com/Desktop/cuny,2025/second semester/622 ML/Final Project/NYC_Payroll_ML/data622/data/raw/Citywide_Payroll_Data__Fiscal_Year__20251009.csv')
+df_original.head(5)
+
+# Get information about the dataset
+df_original.info()
+
+# Get summary statistics for numeric columns
+df_original.describe()
+
+
+#6.7 million records - very large dataset
+#Salary columns likely contain key insights (Base Salary, Regular Gross Paid, OT Paid)
+#9 text columns need examination (names, titles, agencies)
+#Date column is object type - needs conversion
+
+# Check for missing values
+print("Missing values:")
+print(df_original.isnull().sum())
+
+# Check important categorical columns
+cat_cols = ['Agency Name', 'Title Description', 'Leave Status as of June 30', 'Work Location Borough']
+for col in cat_cols:
+    print(f"\n{col}: {df_original[col].nunique()} unique values")
+    print(df_original[col].value_counts().head())
+
+# Filter for 2014 first, then calculate borough percentages for that year
+df_2014 = df_original[df_original['Fiscal Year'] == 2014]
+
+borough_counts_2014 = df_2014['Work Location Borough'].value_counts()
+borough_percentages_2014 = (borough_counts_2014 / len(df_2014) * 100).round(2)
+
+print("2014 Work Location Borough Distribution:")
+print("-" * 50)
+for borough, count in borough_counts_2014.head(10).items():
+    percent = borough_percentages_2014[borough]
+    print(f"{borough}: {count:,} employees ({percent}%)")
+
+# Show summary
+print("\n" + "=" * 50)
+print(f"Total unique boroughs in 2014: {borough_counts_2014.shape[0]}")
+print(f"Total employees in 2014: {len(df_2014):,}")
+# Check unique values in key categorical columns
+print("\nKey categorical columns:")
+print("Agencies:", df_original['Agency Name'].nunique())
+print("Job Titles:", df_original['Title Description'].nunique())
+print("Work Locations:", df_original['Work Location Borough'].nunique())
+
+# Summary stats for pay columns
+pay_cols = ['Base Salary', 'Regular Gross Paid', 'Total OT Paid', 'Total Other Pay']
+print(df_original[pay_cols].describe())
+
+# Check for negative or zero salaries
+print(f"\nRows with zero base salary: {(df_original['Base Salary'] <= 0).sum()}")
+
+# Make sure we have a proper copy, not a view
+df = df_original.drop_duplicates().copy()
+
+# Check how many duplicates were removed
+
+print(f"Original rows: {len(df_original):,}")
+print(f"After removing duplicates: {len(df):,}")
+print(f"Removed {len(df_original) - len(df):,} duplicate rows")
+
+# ============================================================================
+#  Agency Start Date - Convert to datetime and handle errors
+# ============================================================================
+# Convert 'Agency Start Date' to datetime and handle errors
+df['Agency Start Date'] = pd.to_datetime(df['Agency Start Date'], format='%m/%d/%Y', errors='coerce')
+# set upper and lower bounds for valid dates (e.g., 1970-01-01 to 2025-10-31)
+df['Agency Start Date'] = df['Agency Start Date'].clip(lower='1970-01-01', upper='2025-10-31')
+# Check how many values were clipped or set to NaT
+print(f"Agency Start Date clipped to 1970-2025 range. NaT values: {df['Agency Start Date'].isna().sum():,}")
+
+# check leave status distribution
+print("=== LEAVE STATUS DISTRIBUTION ===")
+leave_counts = df['Leave Status as of June 30'].value_counts(dropna=False)
+print(leave_counts.head(10))
+
+#keep on active employees
+df = df[df['Leave Status as of June 30'] == "ACTIVE"]
+
+# ============================================================================
+#  Calculate tenure and clean Work Location Borough
+# ============================================================================
+# Calculate tenure in years as of June 30 of the fiscal year
+df['Employee_Agency_Tenure'] = (
+    (pd.to_datetime(df['Fiscal Year'].astype(str) + '-06-30') - 
+     pd.to_datetime(df['Agency Start Date'])).dt.days / 365.25
+).clip(lower=0)  # Sets negative values to 0
+df['Employee_Agency_Tenure'].describe()
+# Check the distribution before cleaning
+print("Work Location Borough values before cleaning:")
+print(df['Work Location Borough'].value_counts(dropna=False))
+
+
+
+# 1. Clean and standardize borough names first
+df['Work Location Borough'] = df['Work Location Borough'].fillna('UNKNOWN')
+
+# 2. Define mapping for official NYC boroughs ONLY
+nyc_borough_map = {
+    'BRONX': 'BRONX',
+    'BROOKLYN': 'BROOKLYN', 
+    'MANHATTAN': 'MANHATTAN',
+    'QUEENS': 'QUEENS',
+    'RICHMOND': 'STATEN ISLAND',
+    'Bronx': 'BRONX',
+    'Manhattan': 'MANHATTAN', 
+    'Queens': 'QUEENS',
+    'Richmond': 'STATEN ISLAND'
+}
+
+# 3. Apply mapping - non-NYC locations become NaN
+df['Work Location Borough'] = df['Work Location Borough'].map(nyc_borough_map)
+
+# 4. DELETE all non-NYC rows (where borough is NaN)
+rows_before = len(df)
+df = df.dropna(subset=['Work Location Borough'])
+rows_after = len(df)
+
+print(f"Deleted {rows_before - rows_after:,} non-NYC rows")
+print(f"Kept {rows_after:,} NYC borough rows ({rows_after/rows_before*100:.1f}% of original)")
+print("\nNYC Borough Distribution:")
+print(df['Work Location Borough'].value_counts())
+print(df['Work Location Borough'].value_counts(normalize=True).head())
+# Check for negative or zero values in salary/pay columns
+numeric_columns = ['Base Salary', 'Regular Gross Paid', 'Total OT Paid', 'Total Other Pay']
+
+print("Data quality check - suspicious values:")
+for col in numeric_columns:
+    negative_count = (df[col] < 0).sum()
+    zero_count = (df[col] == 0).sum()
+    print(f"{col}: {negative_count:,} negative, {zero_count:,} zero values")
+# Identify columns with negative values to check
+numeric_columns = ['Base Salary', 'Regular Gross Paid', 'Total OT Paid', 'Total Other Pay']
+
+# Create a mask: True for rows where ANY of these columns have negative values
+rows_with_negatives = (df[numeric_columns] < 0).any(axis=1)
+
+# Count how many rows will be deleted
+negatives_to_delete = rows_with_negatives.sum()
+print(f"Rows to delete (with any negative pay value): {negatives_to_delete:,}")
+print(f"Percentage of total dataset: {(negatives_to_delete/len(df)*100):.2f}%")
+
+# Keep only rows WITHOUT negatives (inverse the mask)
+df = df[~rows_with_negatives]
+
+print("Deletion complete. All negative values removed from dataset.")
+# Since Mid Init has 2.7M+ missing, just drop the column
+df = df.drop('Mid Init', axis=1)
+print("Dropped Mid Init column (too many missing values)")
+# Delete rows where Regular Hours or OT Hours are NEGATIVE (keep 0 and above)
+df = df[(df['Regular Hours'] >= 0) & (df['OT Hours'] >= 0)]
+print("\n=== DATA TYPE OPTIMIZATION ===")
+
+# Ensure hours are positive float32
+df['Regular Hours'] = df['Regular Hours'].astype('float32')
+df['OT Hours'] = df['OT Hours'].astype('float32')
+
+# Ensure pay columns are positive float32
+money_cols = ['Base Salary', 'Regular Gross Paid', 'Total OT Paid', 
+              'Total Other Pay']
+for col in money_cols:
+    if col in df.columns:
+        df[col] = df[col].astype('float32')
+
+# Ensure integer columns are Int64
+df['Fiscal Year'] = df['Fiscal Year'].astype('Int64')
+
+
+print("Data types optimized:")
+print(f"Regular Hours: {df['Regular Hours'].dtype}")
+print(f"OT Hours: {df['OT Hours'].dtype}")
+print(f"Base Salary: {df['Base Salary'].dtype}")
+print(f"Fiscal Year: {df['Fiscal Year'].dtype}")
+
+print("\n=== FINAL DATASET STATISTICS ===")
+print(f"Total rows: {len(df):,}")
+print(f"Total columns: {len(df.columns)}")
+
+print(f"\nKey ranges (all positive):")
+print(f"Regular Hours: {df['Regular Hours'].min():.2f} to {df['Regular Hours'].max():.2f}")
+print(f"OT Hours: {df['OT Hours'].min():.2f} to {df['OT Hours'].max():.2f}")
+print(f"Base Salary: ${df['Base Salary'].min():.2f} to ${df['Base Salary'].max():.2f}")
+
+# ============================================================================
+#  AGENCY STANDARDIZATION 
+# ============================================================================
+
+# 1. Standardize Agencies 
+def standardize_agency(agency_name):
+    """Clean up agency names into consistent groups"""
+    if pd.isna(agency_name):
+        return "Unknown Agency"
+    
+    agency = str(agency_name).strip().lower()
+    
+    # COMBINE ALL EDUCATION VARIATIONS FIRST
+    if any(word in agency for word in ['education', 'educ', 'ed ', 'pedagogical', 'para']):
+        return 'Department of Education'
+    
+    # Other agency mappings
+    agency_mapping = {
+        'police': 'Police Department',
+        'fire': 'Fire Department',
+        'sanitation': 'Department of Sanitation',
+        'correction': 'Department of Correction',
+        'transportation': 'Department of Transportation',
+        'health': 'Department of Health',
+        'parks': 'Department of Parks & Recreation',
+        'environmental': 'Department of Environmental Protection',
+        'homeless': 'Department of Homeless Services',
+        'children': 'Administration for Children\'s Services',
+        'aging': 'Department for the Aging',
+        'finance': 'Department of Finance',
+        'buildings': 'Department of Buildings',
+    }
+    
+    for keyword, standardized in agency_mapping.items():
+        if keyword in agency:
+            return standardized
+    
+    # If no match, return title case
+    return str(agency_name).strip().title()
+
+# 2. Keep the same title categorization (it's good)
+def create_broad_title_category(title):
+    """Convert messy titles into broad, useful categories"""
+    if pd.isna(title):
+        return "Unknown Role"
+    
+    title_lower = str(title).lower()
+    
+    # Police/Fire/Sanitation/Corrections (Uniformed)
+    if any(word in title_lower for word in ['police', 'nypd']):
+        return 'Police'
+    elif any(word in title_lower for word in ['fire', 'fdny']):
+        return 'Fire Department'
+    elif 'sanitation' in title_lower:
+        return 'Sanitation'
+    elif 'correction' in title_lower:
+        return 'Corrections'
+    
+    # Education
+    elif any(word in title_lower for word in ['teacher', 'principal', 'pedagogical']):
+        return 'Education - Teaching'
+    elif any(word in title_lower for word in ['para', 'aide', 'school secretary']):
+        return 'Education - Support'
+    
+    # Medical/Health
+    elif any(word in title_lower for word in ['nurse', 'doctor', 'physician', 'medical', 'emt']):
+        return 'Medical/Health'
+    
+    # Administrative
+    elif any(word in title_lower for word in ['administrative', 'admin', 'clerk', 'secretary', 'coordinator']):
+        return 'Administrative'
+    
+    # Management
+    elif any(word in title_lower for word in ['manager', 'director', 'supervisor', 'chief']):
+        return 'Management'
+    
+    # Technical
+    elif any(word in title_lower for word in ['engineer', 'technician', 'analyst', 'specialist']):
+        return 'Technical'
+    
+    # All others
+    else:
+        return 'Other Roles'
+
+# Apply transformations
+print("Applying transformations...")
+df['Agency_Std'] = df['Agency Name'].apply(standardize_agency)  # UPDATED FUNCTION
+df['Title_Category'] = df['Title Description'].apply(create_broad_title_category)
+
+# Show results
+print(f"\n✓ Agencies standardized: {df['Agency Name'].nunique():,} → {df['Agency_Std'].nunique():,}")
+print(f"✓ Title categories created: {df['Title_Category'].nunique()} unique categories")
+
+print("\nTop 10 Agencies (Standardized - EDUCATION COMBINED):")
+print(df['Agency_Std'].value_counts().head(10))
+
+print("\nTitle Category Distribution:")
+print(df['Title_Category'].value_counts())
+
+# ============================================================================
+# TITLE DESCRIPTION STANDARDIZATION
+# ============================================================================
+
+def standardize_title_description(title):
+    """
+    Standardize common title variations for cleaner analysis
+    """
+    if pd.isna(title):
+        return "Unknown"
+    
+    title_str = str(title).strip()
+    title_lower = title_str.lower()
+    
+    # EDUCATION TITLES
+    if 'annual ed para' in title_lower:
+        return 'Para-Professional'
+    elif 'teacher special education' in title_lower:
+        return 'Special Education Teacher'
+    elif title_lower == 'teacher':
+        return 'Teacher'
+    elif 'assistant principal' in title_lower:
+        return 'Assistant Principal'
+    elif title_lower == 'principal':
+        return 'Principal'
+    elif 'guidance counselor' in title_lower:
+        return 'Guidance Counselor'
+    elif 'school secretary' in title_lower:
+        return 'School Secretary'
+    elif 'school safety agent' in title_lower:
+        return 'School Safety Agent'
+    elif 'school social worker' in title_lower:
+        return 'School Social Worker'
+    elif 'school psycholgist' in title_lower:
+        return 'School Psychologist'
+    elif 'educational administrator' in title_lower:
+        return 'Educational Administrator'
+    
+    # POLICE TITLES
+    elif 'p.o. da det gr3' in title_lower:
+        return 'Police Detective Grade 3'
+    elif 'p.o. det spec' in title_lower:
+        return 'Police Detective Specialist'
+    elif title_lower == 'sergeant-':
+        return 'Police Sergeant'
+    elif title_lower == 'police officer':
+        return 'Police Officer'
+    elif 'police officer d/a detective' in title_lower:
+        return 'Police Detective'
+    elif 'lieutenant' in title_lower:
+        return 'Police Lieutenant'
+    elif 'captain' in title_lower:
+        return 'Police Captain'
+    elif 'police communications technician' in title_lower:
+        return 'Police Communications Technician'
+    elif 'police administrative aide' in title_lower:
+        return 'Police Administrative Aide'
+    
+    # EMERGENCY/MEDICAL
+    elif 'emergency medical specialist' in title_lower:
+        if 'paramedic' in title_lower:
+            return 'Emergency Medical Specialist - Paramedic'
+        else:
+            return 'Emergency Medical Specialist'
+    
+    # CORRECTIONS
+    elif title_lower == 'correction officer':
+        return 'Correction Officer'
+    
+    # SANITATION
+    elif title_lower == 'sanitation worker':
+        return 'Sanitation Worker'
+    
+    # FIRE
+    elif title_lower == 'firefighter':
+        return 'Firefighter'
+    
+    # COMMUNITY/SOCIAL SERVICES
+    elif title_lower == 'child protective specialist':
+        return 'Child Protective Specialist'
+    elif title_lower == 'community associate':
+        return 'Community Associate'
+    elif title_lower == 'community coordinator':
+        return 'Community Coordinator'
+    elif title_lower == 'eligibility specialist':
+        return 'Eligibility Specialist'
+    elif title_lower == 'job opportunity specialist':
+        return 'Job Opportunity Specialist'
+    elif title_lower == 'caseworker':
+        return 'Caseworker'
+    elif title_lower == 'community assistant':
+        return 'Community Assistant'
+    
+    # ADMINISTRATIVE/TECHNICAL
+    elif title_lower == 'caretaker':
+        return 'Maintenance Worker'
+    elif title_lower == 'clerical associate':
+        return 'Clerical Associate'
+    elif title_lower == 'administrative staff analyst':
+        return 'Administrative Analyst'
+    elif 'principal administrative associate' in title_lower:
+        return 'Administrative Associate'
+    elif title_lower == 'traffic enforcement agent':
+        return 'Traffic Enforcement Agent'
+    elif title_lower == 'assistant district attorney':
+        return 'Assistant District Attorney'
+    elif title_lower == 'occupational therapist':
+        return 'Occupational Therapist'
+    elif title_lower == 'computer specialist':
+        return 'IT Specialist'
+    elif title_lower == 'computer systems manager':
+        return 'IT Systems Manager'
+    elif title_lower == 'agency attorney':
+        return 'Attorney'
+    elif title_lower == 'computer associate':
+        return 'IT Associate'
+    elif title_lower == 'city research scientist':
+        return 'Research Scientist'
+    elif 'adm manager' in title_lower:
+        return 'Administrative Manager'
+    elif title_lower == 'supervisor':
+        return 'Supervisor'
+    elif 'senior police administrative aide' in title_lower:
+        return 'Senior Police Administrative Aide'
+    
+    # Return original with proper capitalization for others
+    else:
+        return ' '.join(word.capitalize() for word in title_str.split())
+
+# Apply standardization
+df['Title_Std'] = df['Title Description'].apply(standardize_title_description)
+
+# Show results
+print("TITLE STANDARDIZATION RESULTS")
+print("=" * 60)
+print(f"Original unique titles: {df['Title Description'].nunique():,}")
+print(f"Standardized unique titles: {df['Title_Std'].nunique():,}")
+reduction_pct = (1 - df['Title_Std'].nunique()/df['Title Description'].nunique()) * 100
+print(f"Reduction: {reduction_pct:.1f}%")
+
+print(f"\nTop 20 Standardized Titles:")
+top_titles = df['Title_Std'].value_counts().head(20)
+for i, (title, count) in enumerate(top_titles.items(), 1):
+    pct = (count / len(df)) * 100
+    print(f"{i:2}. {title:40} {count:>9,} ({pct:.1f}%)")
+
+# Show before/after comparison
+print(f"\nBEFORE/AFTER EXAMPLES:")
+examples = [
+    ('Annual Ed Para', 'Para-Professional'),
+    ('Teacher Special Education', 'Special Education Teacher'),
+    ('P.O. Da Det Gr3', 'Police Detective Grade 3'),
+    ('Sergeant-', 'Police Sergeant'),
+    ('Emergency Medical Specialist-Emt', 'Emergency Medical Specialist'),
+    ('Caretaker', 'Maintenance Worker')
+]
+
+for before, after in examples:
+    before_count = df[df['Title Description'] == before].shape[0] if before in df['Title Description'].values else 0
+    after_count = df[df['Title_Std'] == after].shape[0]
+    print(f"  {before:35} → {after:35} : {before_count:>6,} records")
+# For exact match (case insensitive)
+president_exact = df[df['Title_Std'].str.lower() == 'president']
+
+print(f"Found {len(president_exact)} rows with Title_Std exactly equal to 'president'")
+print(president_exact.head(5))
+pay_basis_counts = df['Pay Basis'].value_counts()
+print("Pay Basis Distribution:")
+for basis, count in pay_basis_counts.items():
+    print(f"{basis}: {count:,}")
+
+# Filter for per Annum employees only
+df_annum = df[df['Pay Basis'] == 'per Annum']
+# Count records per borough per year
+borough_year_counts = df_annum.groupby(['Fiscal Year', 'Work Location Borough']).size().unstack(fill_value=0)
+
+print(borough_year_counts)
+df_annum = df_annum[df_annum['Fiscal Year'] != 2014]
+# Confirm removal
+print(f"Years in analysis: {sorted(df_annum['Fiscal Year'].unique())}")
+print(f"Timeframe: {df_annum['Fiscal Year'].min()} - {df_annum['Fiscal Year'].max()}")
+print(f"Total years: {df_annum['Fiscal Year'].nunique()}")
+# Remove incomplete 2025 data
+df_annum = df_annum[df_annum['Fiscal Year'] != 2025]
+
+# Confirm removal
+print(f"Years in analysis: {sorted(df_annum['Fiscal Year'].unique())}")
+print(f"Timeframe: {df_annum['Fiscal Year'].min()} - {df_annum['Fiscal Year'].max()}")
+print(f"Total years: {df_annum['Fiscal Year'].nunique()}")
+df_annum.info()
+
+# Save df_annum to CSV
+df_annum.to_csv('/Users/mehreen.gillaniicloud.com/Desktop/cuny,2025/second semester/622 ML/Final Project/NYC_Payroll_ML/data622/data/processed/nyc_annual_salary_employees_payBasis_perAnuum.csv', index=False)
+
+print(f"✅ File saved: nyc_annual_salary_employees_payBasis_perAnuum.csv")
+print(f"📁 Rows: {len(df_annum):,}, Columns: {len(df_annum.columns)}")
+
+# ============================================================================
+#  VISUALIZATION: Workforce Trend Over Time (Line Chart)
+# ============================================================================
+
+# Count employees per fiscal year
+year_counts = df_annum['Fiscal Year'].value_counts().sort_index()
+
+# Create figure with presentation-friendly styling
+plt.figure(figsize=(14, 7))
+
+# Plot line with enhanced styling
+plt.plot(year_counts.index, year_counts.values, 
+         marker='o', 
+         linewidth=3.5, 
+         markersize=10,
+         color='#2E86AB',  # Professional blue
+         markerfacecolor='#E15554',  # Contrast red for markers
+         markeredgecolor='white',
+         markeredgewidth=2)
+
+# Customize titles and labels
+plt.title('NYC Salaried Workforce Trend: 2015-2024', 
+          fontsize=20, fontweight='bold', pad=20)
+plt.xlabel('Fiscal Year', fontsize=14, fontweight='semibold', labelpad=10)
+plt.ylabel('Number of Salaried Employees', fontsize=11, fontweight='semibold', labelpad=10)
+
+# Improve grid and ticks
+plt.grid(True, alpha=0.2, linestyle='--', linewidth=0.8)
+plt.xticks(year_counts.index, fontsize=12)
+plt.yticks(fontsize=12)
+
+# Add value labels with better positioning
+for x, y in zip(year_counts.index, year_counts.values):
+    plt.text(x, y + 1500, f'{y:,}', 
+             ha='center', 
+             fontsize=11, 
+             fontweight='bold',
+             bbox=dict(boxstyle='round,pad=0.3', 
+                      facecolor='white', 
+                      edgecolor='gray', 
+                      alpha=0.8))
+
+# Highlight pre/post pandemic with shaded region
+plt.axvspan(2019.5, 2020.5, alpha=0.1, color='orange', label='Pandemic Period')
+
+# Add annotation for key events
+plt.annotate('Pre-Pandemic\nGrowth', 
+             xy=(2018, year_counts[2018]), 
+             xytext=(2016, year_counts[2018] - 50000),
+             arrowprops=dict(arrowstyle='->', color='gray', lw=1.5),
+             fontsize=11,
+             bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9))
+
+plt.annotate('Post-Pandemic\nRecovery', 
+             xy=(2023, year_counts[2023]), 
+             xytext=(2021, year_counts[2023] - 30000),
+             arrowprops=dict(arrowstyle='->', color='gray', lw=1.5),
+             fontsize=11,
+             bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9))
+
+# Add data source
+plt.text(0.3, 0.3, 'Source: NYC Open Data - Citywide Payroll', 
+         transform=plt.gca().transAxes, 
+         fontsize=9, 
+         alpha=0.7)
+
+# Add summary statistics box
+stats_text = f'Peak: {year_counts.max():,} ({year_counts.idxmax()})\nLow: {year_counts.min():,} ({year_counts.idxmin()})'
+plt.text(0.98, 0.98, stats_text, 
+         transform=plt.gca().transAxes,
+         verticalalignment='top',
+         horizontalalignment='right',
+         fontsize=11,
+         bbox=dict(boxstyle='round,pad=0.5', facecolor='whitesmoke', alpha=0.9))
+
+plt.tight_layout()
+plt.show()
+
+# Print key insights for presentation talking points
+print("="*60)
+print("KEY INSIGHTS FROM THIS VISUALIZATION:")
+print("="*60)
+print(f"1. Overall Trend: {'Growth' if year_counts.values[-1] > year_counts.values[0] else 'Decline'} of "
+      f"{(year_counts.values[-1]/year_counts.values[0]-1)*100:.1f}% over decade")
+print(f"2. Stability: Relatively steady workforce size (~{year_counts.mean():,.0f} average)")
+print(f"3. Pandemic Impact: {'Noticeable' if abs(year_counts[2020] - year_counts[2019]) > 10000 else 'Minimal'} "
+      f"change from {year_counts[2019]:,} to {year_counts[2020]:,}")
+print(f"4. Recent Trend: Last 3 years show {'growth' if year_counts.values[-1] > year_counts.values[-4] else 'stability'}")
+print("="*60)
