@@ -10,6 +10,10 @@ __pycache__/
 /data/raw/
 *.csv
 
+# macOS
+.DS_Store
+**/.DS_Store
+
 # Distribution / packaging
 .Python
 build/
