@@ -124,3 +124,41 @@ The MVP will include:
 - user inputs for job title and years of service
 - predicted salary output
 - simple supporting visualization
+
+## Exploratory Data Analysis (EDA) - Added Outputs
+
+A quick EDA was run against the processed payroll CSV and outputs were added to the repository to speed review and downstream analysis. Key artifacts and findings:
+
+- Outputs added (large files tracked with Git LFS):
+  - `data/processed/nyc_payroll_combined_all_2015_2024.csv` (combined, ~624 MB)
+  - `data/processed/nyc_payroll_hourly_employees_2015_2024.csv` (~371 MB)
+  - `data/processed/nyc_payroll_salaried_doe_2015_2024.csv` (~237 MB)
+  - EDA notebook: `notebooks/exploratory/EDA.ipynb`
+  - EDA outputs: `notebooks/exploratory/eda_outputs/summary.txt` and `head_sample.csv`
+
+- High-level EDA summary (see `summary.txt` for full details):
+  - Rows: 2,770,022; Columns: 20 for the main payroll file.
+  - Median `Base Salary`: ~75,366; max `Base Salary`: ~414,707.
+  - Missingness: `Payroll Number` has ~816,936 missing, `First Name`/`Last Name` ~4k missing.
+  - Top `Agency Name`: `DEPT OF ED PEDAGOGICAL` (largest segment).
+  - Top `Title Description`: `TEACHER` (largest role by records).
+
+### How to reproduce the EDA locally
+
+1. Ensure dependencies are installed:
+
+```bash
+python3 -m pip install pandas numpy matplotlib seaborn
+```
+
+2. Run the EDA script (this reads the processed CSV and regenerates summary and sample outputs):
+
+```bash
+python3 scripts/run_eda.py
+```
+
+Notes:
+- The processed CSVs are large; ensure you have sufficient disk space and memory. The repository uses Git LFS for these files.
+- If you prefer not to keep large CSVs in the repo, we can remove them from Git history and add a short README note with download instructions instead.
+
+If you'd like, I can (1) embed the generated EDA outputs into the notebook, (2) add targeted plots to the `notebooks/exploratory/eda_outputs` folder, or (3) remove the large CSVs from the repo and provide download instructions.
