@@ -1,0 +1,85 @@
+EDA Notebook Summary
+Generated from: notebooks/exploratory/EDA.ipynb
+Generated on: 2026-03-12
+
+High-level dataset
+- Source: data/processed/nyc_annual_salary_employees_payBasis_perAnuum.csv
+- Rows: 2,770,022
+- Columns: 20
+
+Step-by-step tasks performed in `notebooks/exploratory/EDA.ipynb` (executed order):
+
+1) Imports and repo root detection
+   - Import common libraries: pandas, numpy, matplotlib, seaborn, pathlib, os
+   - Resolve `repo_root` by walking up to the repository root so paths are relative
+
+2) Load primary processed CSV
+   - Load: `data/processed/nyc_annual_salary_employees_payBasis_perAnuum.csv` using `pd.read_csv(low_memory=False)`
+   - Display head and `df.info()` to confirm types and presence of columns
+
+3) Initial column pruning
+   - Drop columns: `Pay Basis` and `Leave Status as of June 30` (not used further)
+
+4) Compute `Total_Compensation`
+   - New column `Total_Compensation` = `Regular Gross Paid` + `Total OT Paid` + `Total Other Pay` (treating missing as 0)
+
+5) Anomaly detection
+   - Flag rows where `Total_Compensation` < 0.5 * `Base Salary` as anomalies
+   - Quick profile: counts and descriptive stats for anomalous subset
+   - Inspect `Regular Hours` distribution for anomalies and bucket hours
+
+6) Build `df_full` and apply meaningful-employment filters
+   - Remove records with zero or negative `Total_Compensation`
+   - Create `Hours_Tracked` flag (Regular Hours > 0)
+   - Define `hourly_candidates` (Hours_Tracked, Regular Hours >= 1000, Total_Compensation >= 20000)
+   - Define `salaried_candidates` (not Hours_Tracked, Total_Compensation >= 30000)
+   - Combine candidates and deduplicate to form `df` (the analysis dataset)
+   - Create `Employment_Type` buckets based on `Regular Hours` (Very_Low_Hours, Part_Year, Partial_Year, Full_Year)
+
+7) Final dataset splits and aliases
+   - `df_hourly_final`: hourly workers (hours tracked)
+   - `df_salaried_final`: salaried workers (no hours tracked)
+   - Convenience aliases: `df_hourly`, `df_salaried`
+
+8) Top earners sanity checks
+   - Inspect top N rows by `Total_Compensation`
+   - Count earners above thresholds ($200k, $300k, $500k)
+
+9) Borough distribution and comparison
+   - Implement `get_borough_distribution()` to print counts + percentages (handles NaN)
+   - Compare borough shares between salaried vs hourly datasets
+   - Note and handle high-volume DOE coding that skews borough data (DOE coded as MANHATTAN)
+
+10) Agency / segment breakdowns
+   - Create `df_doe`, `df_uniformed`, and `df_civilian` segments
+   - Verify segment totals match the combined dataset
+   - Produce segment-level metrics (avg comp, median, max, OT % of comp, unique agencies, years covered)
+
+11) Overtime (OT) analysis
+   - Focus on `df_hourly_final` for OT analysis
+   - Compute total payroll, total OT, OT % of payroll, workers with/without OT
+   - OT intensity by segment (Uniformed vs Civilian)
+   - Top agencies by OT spend and OT trend across Fiscal Years (2015–2024)
+   - Bin OT into brackets and summarize worker counts and totals per bracket
+
+12) Extreme OT earners and year-over-year investigation
+   - Identify workers with `Total OT Paid` > $100k and summarize by agency and year
+   - Investigate major OT surge between 2021→2022 with agency-level changes and headcount deltas
+
+13) OT hours methodology note (FY2023)
+   - Add `OT_Hours_Reliable` boolean flag: `Fiscal Year >= 2023`
+   - Document that OT HOURS are not directly comparable pre/post FY2023; use OT DOLLARS for cross-year comparisons
+
+14) Save final outputs (data persistence)
+   - Ensure output directory exists: `data/processed`
+   - Save CSVs (uncompressed by default):
+       - `nyc_payroll_hourly_employees_2015_2024.csv`  (df_hourly_final)
+       - `nyc_payroll_salaried_doe_2015_2024.csv`     (df_salaried_final)
+       - `nyc_payroll_combined_all_2015_2024.csv`    (df)
+   - Also write `head_sample.csv` and (optionally) plots under `notebooks/exploratory/eda_outputs/plots` when generated
+
+Notes & next steps
+- Plots were created during the run and saved under `notebooks/exploratory/eda_outputs/plots` (PNG files). If you prefer these not be tracked in git, add `*.png` (or the specific plots folder) to `.gitignore` and untrack existing PNGs.
+- Consider saving CSV outputs compressed (`.csv.gz`) to reduce repository storage if needed.
+
+End of summary.
