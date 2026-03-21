@@ -24,6 +24,25 @@ SCRIPTS_DIR = PROJECT_ROOT / "scripts"       # Contains scripts to run full pipe
 # Config directory
 CONFIG_DIR = PROJECT_ROOT / "config"         # Contains configuration files (e.g. model params, feature lists)
 
+from src.data622.config import (
+    PROJECT_ROOT,
+    DATA_DIR,
+    RAW_DATA_DIR,
+    INTERIM_DATA_DIR,
+    PROCESSED_DATA_DIR,
+    MODELS_DIR,
+    REFERENCES_DIR,
+)
+
+__all__ = [
+    "PROJECT_ROOT",
+    "DATA_DIR",
+    "RAW_DATA_DIR",
+    "INTERIM_DATA_DIR",
+    "PROCESSED_DATA_DIR",
+    "MODELS_DIR",
+    "REFERENCES_DIR",
+]
 # Sample usage:
 # from data622.paths import RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR
 #
