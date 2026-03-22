@@ -6,7 +6,7 @@ from __future__ import annotations
 import pandas as pd
 from pathlib import Path
 
-from src.data622.paths import PROCESSED_DATA_DIR
+from data622.paths import PROCESSED_DATA_DIR
 
 # Default input file 
 DEFAULT_INPUT_FILE = PROCESSED_DATA_DIR / "nyc_annual_salary_employees_payBasis_perAnuum.csv"
