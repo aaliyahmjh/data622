@@ -9,7 +9,7 @@ from pathlib import Path
 from data622.paths import PROCESSED_DATA_DIR
 
 # Default input file 
-DEFAULT_INPUT_FILE = PROCESSED_DATA_DIR / "nyc_annual_salary_employees_payBasis_perAnuum.csv"
+DEFAULT_INPUT_FILE = PROCESSED_DATA_DIR / "nyc_payroll_combined_all_2015_2024.csv"
 
 # Salary bounds to remove extreme outliers
 MIN_BASE_SALARY = 10000
@@ -66,6 +66,7 @@ def filter_model_population(df: pd.DataFrame) -> pd.DataFrame:
         "total_compensation",
         "regular_hours",
         "work_location_borough",
+        "ot_pay_ratio"
     ]
     existing_cols = [c for c in required_cols if c in df.columns]
     df = df[existing_cols].copy()
@@ -131,4 +132,42 @@ def split_by_year(df: pd.DataFrame):
     train_df = df[df["fiscal_year"].isin(TRAIN_YEARS)].copy()
     valid_df = df[df["fiscal_year"].isin(VALID_YEARS)].copy()
     test_df = df[df["fiscal_year"].isin(TEST_YEARS)].copy()
+    return train_df, valid_df, test_df
+
+
+# Save train/validation/test to separate CSV files
+def save_train_valid_test(
+    train_df: pd.DataFrame,
+    valid_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    output_dir: Path | str = None
+) -> tuple[Path, Path, Path]:
+    """
+    Save train, validation, and test sets to separate CSV files.
+    
+    Args:
+        train_df: Training data
+        valid_df: Validation data
+        test_df: Test data
+        output_dir: Directory to save CSVs (default: PROCESSED_DATA_DIR)
+    
+    Returns:
+        Tuple of (train_path, valid_path, test_path)
+    """
+    output_dir = Path(output_dir) if output_dir else PROCESSED_DATA_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    train_path = output_dir / "train_set.csv"
+    valid_path = output_dir / "valid_set.csv"
+    test_path = output_dir / "test_set.csv"
+    
+    train_df.to_csv(train_path, index=False)
+    valid_df.to_csv(valid_path, index=False)
+    test_df.to_csv(test_path, index=False)
+    
+    print(f"✅ Train set saved: {train_path} ({len(train_df)} rows)")
+    print(f"✅ Valid set saved: {valid_path} ({len(valid_df)} rows)")
+    print(f"✅ Test set saved:  {test_path} ({len(test_df)} rows)")
+    
+    return train_path, valid_path, test_path
     return train_df, valid_df, test_df
