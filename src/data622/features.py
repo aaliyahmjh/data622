@@ -66,9 +66,9 @@ def add_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = add_agency_size(df)
     df = add_title_avg_salary(df)
     
-    # NEW: over-time features
-    df = add_ot_features(df)
-
+    # NEW: overtime features (only if ot_hours exists)
+    if "ot_hours" in df.columns:
+        df = add_ot_features(df)
 
     return df
 
