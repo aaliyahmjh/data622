@@ -15,9 +15,23 @@ DEFAULT_INPUT_FILE = PROCESSED_DATA_DIR / "nyc_payroll_combined_all_2015_2024.cs
 MIN_BASE_SALARY = 10000
 MAX_BASE_SALARY = 500000
 
-TRAIN_YEARS = list(range(2015, 2023))
+# TRAIN/VALID/TEST SPLIT STRATEGY:
+# ================================
+# Issue: Salary increases every year → temporal drift
+# Solutions:
+#   1. Keep fiscal_year as a feature (model learns trend)
+#   2. Use recent years only (reduces drift: 2021-2024)
+#   3. Add year-relative features (percentile, vs avg)
+#
+# Current split (recommended):
+TRAIN_YEARS = list(range(2021, 2023))  # 2021, 2022 (recent years)
 VALID_YEARS = [2023]
 TEST_YEARS = [2024]
+
+# Alternative: Use all years (if keeping fiscal_year as feature)
+# TRAIN_YEARS = list(range(2015, 2023))  # 2015-2022
+# VALID_YEARS = [2023]
+# TEST_YEARS = [2024]
 
 
 # Convert column names to snake case
@@ -127,47 +141,16 @@ def add_tenure_proxy(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# Split data into train/validation/test sets by year
+# Split data into train/validation/test sets by fiscal year
 def split_by_year(df: pd.DataFrame):
+    """
+    Split dataset into train/valid/test by fiscal year.
+    
+    SOLUTION 1: Keep fiscal_year as a feature
+    Model learns salary trend across years, reducing temporal drift.
+    """
     train_df = df[df["fiscal_year"].isin(TRAIN_YEARS)].copy()
     valid_df = df[df["fiscal_year"].isin(VALID_YEARS)].copy()
     test_df = df[df["fiscal_year"].isin(TEST_YEARS)].copy()
-    return train_df, valid_df, test_df
-
-
-# Save train/validation/test to separate CSV files
-def save_train_valid_test(
-    train_df: pd.DataFrame,
-    valid_df: pd.DataFrame,
-    test_df: pd.DataFrame,
-    output_dir: Path | str = None
-) -> tuple[Path, Path, Path]:
-    """
-    Save train, validation, and test sets to separate CSV files.
     
-    Args:
-        train_df: Training data
-        valid_df: Validation data
-        test_df: Test data
-        output_dir: Directory to save CSVs (default: PROCESSED_DATA_DIR)
-    
-    Returns:
-        Tuple of (train_path, valid_path, test_path)
-    """
-    output_dir = Path(output_dir) if output_dir else PROCESSED_DATA_DIR
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    train_path = output_dir / "train_set.csv"
-    valid_path = output_dir / "valid_set.csv"
-    test_path = output_dir / "test_set.csv"
-    
-    train_df.to_csv(train_path, index=False)
-    valid_df.to_csv(valid_path, index=False)
-    test_df.to_csv(test_path, index=False)
-    
-    print(f"✅ Train set saved: {train_path} ({len(train_df)} rows)")
-    print(f"✅ Valid set saved: {valid_path} ({len(valid_df)} rows)")
-    print(f"✅ Test set saved:  {test_path} ({len(test_df)} rows)")
-    
-    return train_path, valid_path, test_path
     return train_df, valid_df, test_df
