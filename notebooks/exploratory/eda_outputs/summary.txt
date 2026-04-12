@@ -1,0 +1,143 @@
+Loading: /workspaces/data622/data/processed/nyc_annual_salary_employees_payBasis_perAnuum.csv
+Shape: (2770022, 20)
+
+-- Dtypes --
+Fiscal Year: int64
+Payroll Number: float64
+Agency Name: object
+Last Name: object
+First Name: object
+Agency Start Date: object
+Work Location Borough: object
+Title Description: object
+Leave Status as of June 30: object
+Base Salary: float64
+Pay Basis: object
+Regular Hours: float64
+Regular Gross Paid: float64
+OT Hours: float64
+Total OT Paid: float64
+Total Other Pay: float64
+Employee_Agency_Tenure: float64
+Agency_Std: object
+Title_Category: object
+Title_Std: object
+
+-- Top missing values (20) --
+Payroll Number                816936
+First Name                      4193
+Last Name                       4175
+Agency Start Date                 97
+Employee_Agency_Tenure            97
+Title Description                 88
+Agency Name                        0
+Fiscal Year                        0
+Leave Status as of June 30         0
+Base Salary                        0
+Pay Basis                          0
+Work Location Borough              0
+Regular Hours                      0
+Regular Gross Paid                 0
+Total OT Paid                      0
+OT Hours                           0
+Total Other Pay                    0
+Agency_Std                         0
+Title_Category                     0
+Title_Std                          0
+
+-- Numeric summary (first 20 cols) --
+                            count          mean           std     min           25%           50%           75%            max
+Fiscal Year             2770022.0   2019.499240      2.843631  2015.0   2017.000000   2019.000000   2022.000000    2024.000000
+Payroll Number          1953086.0    507.968523    347.197788     2.0     57.000000    742.000000    744.000000     996.000000
+Base Salary             2770022.0  76298.895353  30798.810735     1.0  50207.000000  75365.500000  95559.000000  414707.000000
+Regular Hours           2770022.0   1119.659496    948.030745     0.0      0.000000   1790.000000   2045.720000    4160.000000
+Regular Gross Paid      2770022.0  73550.286684  32973.867831     0.0  47073.210000  72106.840000  93182.610000  672308.900000
+OT Hours                2770022.0    117.158531    216.777717     0.0      0.000000      0.000000    162.000000    3692.900000
+Total OT Paid           2770022.0   6440.428202  13150.155826     0.0      0.000000      0.000000   6930.897500  527532.000000
+Total Other Pay         2770022.0   5612.766587   7268.782647     0.0      8.250000   2867.800000   8109.190000  714664.300000
+Employee_Agency_Tenure  2769925.0     11.964283      8.768130     0.0      4.413415     10.715948     17.984942      54.494182
+
+-- Top categories for up to 6 object columns --
+
+[Agency Name] top values:
+Agency Name
+DEPT OF ED PEDAGOGICAL           850950
+POLICE DEPARTMENT                483429
+DEPT OF ED PARA PROFESSIONALS    233922
+FIRE DEPARTMENT                  161892
+HRA/DEPT OF SOCIAL SERVICES      119528
+DEPARTMENT OF EDUCATION ADMIN    110540
+DEPARTMENT OF CORRECTION          95240
+DEPARTMENT OF SANITATION          87406
+NYC HOUSING AUTHORITY             81087
+ADMIN FOR CHILDREN'S SVCS         63169
+
+[Last Name] top values:
+Last Name
+RODRIGUEZ    18637
+WILLIAMS     15980
+SMITH        12916
+BROWN        12164
+JOHNSON      11927
+RIVERA       10813
+GONZALEZ      9770
+MARTINEZ      9214
+JONES         8935
+PEREZ         8855
+
+[First Name] top values:
+First Name
+MICHAEL        49942
+JOHN           29886
+JOSEPH         27043
+CHRISTOPHER    23555
+ROBERT         23368
+JAMES          21088
+ANTHONY        20522
+JENNIFER       20492
+DAVID          19694
+DANIEL         18738
+
+[Agency Start Date] top values:
+Agency Start Date
+2014-09-02    30265
+2015-09-08    29604
+2007-08-30    29133
+2013-09-03    26874
+2016-09-06    26127
+2006-08-31    25472
+2005-09-06    23826
+2012-09-04    23652
+2004-09-07    22968
+2001-09-04    22740
+
+[Work Location Borough] top values:
+Work Location Borough
+MANHATTAN        1750016
+QUEENS            408552
+BROOKLYN          361194
+BRONX             196909
+STATEN ISLAND      53351
+
+[Title Description] top values:
+Title Description
+TEACHER                      470903
+ANNUAL ED PARA               232218
+POLICE OFFICER               224553
+TEACHER SPECIAL EDUCATION    223154
+FIREFIGHTER                   78934
+CORRECTION OFFICER            74571
+SANITATION WORKER             62460
+COMMUNITY ASSOCIATE           47092
+SCHOOL SAFETY AGENT           45020
+COMMUNITY COORDINATOR         39258
+
+Saved head sample to: /workspaces/data622/notebooks/exploratory/eda_outputs/head_sample.csv
+Saved plot: /workspaces/data622/notebooks/exploratory/eda_outputs/plots/hist_Fiscal Year.png
+Saved plot: /workspaces/data622/notebooks/exploratory/eda_outputs/plots/hist_Payroll Number.png
+Saved plot: /workspaces/data622/notebooks/exploratory/eda_outputs/plots/hist_Base Salary.png
+Saved plot: /workspaces/data622/notebooks/exploratory/eda_outputs/plots/hist_Regular Hours.png
+Saved plot: /workspaces/data622/notebooks/exploratory/eda_outputs/plots/hist_Regular Gross Paid.png
+Saved plot: /workspaces/data622/notebooks/exploratory/eda_outputs/plots/hist_OT Hours.png
+Saved plot: /workspaces/data622/notebooks/exploratory/eda_outputs/plots/hist_Total OT Paid.png
+Saved plot: /workspaces/data622/notebooks/exploratory/eda_outputs/plots/hist_Total Other Pay.png

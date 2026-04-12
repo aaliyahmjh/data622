@@ -9,6 +9,10 @@ __pycache__/
 # Raw data files
 /data/raw/
 *.csv
+# Exception: track processed split files
+!data/processed/train_set.csv
+!data/processed/valid_set.csv
+!data/processed/test_set.csv
 
 # macOS
 .DS_Store
