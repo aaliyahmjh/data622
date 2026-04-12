@@ -6,9 +6,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import cross_val_score, KFold, RandomizedSearchCV
+from sklearn.model_selection import cross_val_score, KFold, GridSearchCV
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from xgboost import XGBRegressor
 import joblib
@@ -20,14 +20,18 @@ from data622.features import make_preprocessor, get_model_columns
 class SalaryPredictionModel:
     """Train and evaluate NYC payroll salary prediction model."""
     
-    def __init__(self, model_type: str = "linear"):
+    def __init__(self, model_type: str = "linear", alpha: float = None, regularization: str = None):
         """
         Initialize model.
         
         Args:
-            model_type: "linear" (LinearRegression) or "rf" (RandomForest)
+            model_type: "linear" (LinearRegression), "ridge" (Ridge), "lasso" (Lasso), "rf" (RandomForest)
+            alpha: Regularization strength (for ridge/lasso)
+            regularization: "ridge", "lasso", or "elasticnet" (for linear models)
         """
         self.model_type = model_type
+        self.alpha = alpha
+        self.regularization = regularization
         self.preprocessor = None
         self.model = None
         self.feature_cols = None
@@ -87,6 +91,15 @@ class SalaryPredictionModel:
         # Initialize and train model
         if self.model_type == "linear":
             self.model = LinearRegression()
+        elif self.model_type == "ridge":
+            alpha = self.alpha if self.alpha is not None else 1.0
+            self.model = Ridge(alpha=alpha)
+        elif self.model_type == "lasso":
+            alpha = self.alpha if self.alpha is not None else 0.001
+            self.model = Lasso(alpha=alpha, max_iter=10000)
+        elif self.model_type == "elasticnet":
+            alpha = self.alpha if self.alpha is not None else 0.001
+            self.model = ElasticNet(alpha=alpha, max_iter=10000)
         elif self.model_type == "rf":
             self.model = RandomForestRegressor(n_estimators=100, n_jobs=-1, random_state=42)
         else:
@@ -142,6 +155,64 @@ class SalaryPredictionModel:
         print(f"CV R² scores: {cv_scores}")
         print(f"Mean R²: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
         
+        return cv_scores
+    
+    def tune_regularization(self, target: str = "log_base_salary", cv: int = 5):
+        """Tune regularization hyperparameter (alpha) for Ridge/Lasso."""
+        if self.model_type not in ["ridge", "lasso", "elasticnet"]:
+            print(f"⚠️  Tuning only works for ridge/lasso/elasticnet models, got {self.model_type}")
+            return None
+        
+        print(f"\n🔍 Tuning {self.model_type.upper()} regularization (alpha)...")
+        
+        X_train, y_train = self.get_X_y(self.train_df, target)
+        X_train_transformed = self.preprocessor.fit_transform(X_train)
+        
+        # Define alpha values to test
+        if self.model_type == "ridge":
+            alphas = np.logspace(-3, 3, 20)  # Ridge: broader range
+            model_class = Ridge
+        elif self.model_type == "lasso":
+            alphas = np.logspace(-5, 1, 20)  # Lasso: smaller alphas work better
+            model_class = Lasso
+        else:  # elasticnet
+            alphas = np.logspace(-4, 1, 20)
+            model_class = ElasticNet
+        
+        # GridSearchCV
+        param_grid = {'alpha': alphas}
+        base_model = model_class(max_iter=10000) if self.model_type != "ridge" else model_class()
+        
+        search = GridSearchCV(
+            base_model, param_grid, cv=cv, 
+            scoring='r2', n_jobs=-1, verbose=1
+        )
+        
+        search.fit(X_train_transformed, y_train)
+        
+        best_alpha = search.best_params_['alpha']
+        best_score = search.best_score_
+        
+        print(f"\n✅ Best alpha found: {best_alpha:.6f}")
+        print(f"✅ Best CV R²: {best_score:.4f}")
+        
+        # Update model with best alpha
+        self.alpha = best_alpha
+        if self.model_type == "ridge":
+            self.model = Ridge(alpha=best_alpha)
+        elif self.model_type == "lasso":
+            self.model = Lasso(alpha=best_alpha, max_iter=10000)
+        else:
+            self.model = ElasticNet(alpha=best_alpha, max_iter=10000)
+        
+        self.model.fit(X_train_transformed, y_train)
+        
+        return {
+            'best_alpha': best_alpha,
+            'best_cv_r2': best_score,
+            'all_alphas': alphas,
+            'cv_results': search.cv_results_
+        }
         return cv_scores
     
     def evaluate(self, target: str = "log_base_salary"):
@@ -213,15 +284,39 @@ def main():
     print("NYC PAYROLL SALARY PREDICTION MODEL")
     print("="*60)
     
+    results_dict = {}
+    
     # Train Linear Regression model
     print("\n🔵 Training LINEAR REGRESSION model...")
     model_lr = SalaryPredictionModel(model_type="linear")
     results_lr = model_lr.full_pipeline(model_type="linear")
+    results_dict["Linear Regression"] = results_lr['r2']
+    
+    # Train Ridge Regression model with tuning
+    print("\n\n🟣 Training RIDGE REGRESSION model (with hyperparameter tuning)...")
+    model_ridge = SalaryPredictionModel(model_type="ridge")
+    model_ridge.load_data()
+    model_ridge.prepare_features()
+    ridge_tune_results = model_ridge.tune_regularization(cv=5)
+    model_ridge.cross_validate()
+    results_ridge = model_ridge.evaluate()
+    results_dict["Ridge Regression"] = results_ridge['r2']
+    
+    # Train Lasso Regression model with tuning
+    print("\n\n🟡 Training LASSO REGRESSION model (with hyperparameter tuning)...")
+    model_lasso = SalaryPredictionModel(model_type="lasso")
+    model_lasso.load_data()
+    model_lasso.prepare_features()
+    lasso_tune_results = model_lasso.tune_regularization(cv=5)
+    model_lasso.cross_validate()
+    results_lasso = model_lasso.evaluate()
+    results_dict["Lasso Regression"] = results_lasso['r2']
     
     # Train Random Forest model
     print("\n\n🟢 Training RANDOM FOREST model...")
     model_rf = SalaryPredictionModel(model_type="rf")
     results_rf = model_rf.full_pipeline(model_type="rf")
+    results_dict["Random Forest"] = results_rf['r2']
     
     # Train XGBoost Model
     print("\n\n🔥 Training and Tuning XGBOOST model...")
@@ -234,11 +329,21 @@ def main():
 
     # Compare results
     print("\n\n" + "="*60)
-    print("MODEL COMPARISON")
+    print("MODEL COMPARISON - TEST SET RESULTS")
+    print("="*60)
+    
+    # Sort by R² score
+    sorted_results = sorted(results_dict.items(), key=lambda x: x[1], reverse=True)
+    
+    for i, (model_name, r2_score) in enumerate(sorted_results, 1):
+        emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "  "
+        print(f"{emoji} {model_name:25s} R² = {r2_score:.4f}")
+    
     print("="*60)
     print(f"Linear Regression R²: {results_lr['r2']:.4f}")
     print(f"Random Forest R²:     {results_rf['r2']:.4f}")
     print(f"Tuned XGBoost R²:     {results_xgb['r2']:.4f}")
+    print(f"\n✅ Best model: {sorted_results[0][0]} with R² = {sorted_results[0][1]:.4f}")
     print("="*60)
 
 
