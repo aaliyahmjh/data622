@@ -1,0 +1,10 @@
+[theme]
+# Background and surface colors
+backgroundColor          = "#4a5568"  # steel blue-grey — main content area
+secondaryBackgroundColor = "#2d3748"  # darker steel blue — sidebar and input fields
+
+# Text
+textColor                = "#f0f0f0"  # light text for contrast on dark backgrounds
+
+# Accent — very deep aquamarine for buttons, sliders, and interactive elements
+primaryColor             = "#004d40"
