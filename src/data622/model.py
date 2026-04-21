@@ -10,6 +10,7 @@ from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score, KFold, GridSearchCV
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from xgboost import XGBRegressor
 import joblib
 
 from data622.paths import PROCESSED_DATA_DIR
@@ -107,6 +108,37 @@ class SalaryPredictionModel:
         self.model.fit(X_train_transformed, y_train)
         print(f"✅ Model trained successfully")
         
+    def tune_xgboost(self, target: str = "log_base_salary", n_iter: int = 5, cv: int = 3):
+        """Tune XGBoost hyperparameters using RandomizedSearchCV."""
+        print(f"\n🔍 Tuning hyperparameters for XGBoost...")
+        
+        if self.model_type != "xgb":
+            print("Model type must be 'xgb' to run this tuning function.")
+            return
+
+        X_train, y_train = self.get_X_y(self.train_df, target)
+        X_train_transformed = self.preprocessor.fit_transform(X_train)
+        
+        base_model = XGBRegressor(random_state=42, n_jobs=-1)
+        
+        param_grid = {
+            'n_estimators': [100, 200, 300], 
+            'learning_rate': [0.01, 0.05, 0.1], 
+            'max_depth': [3, 5, 7],
+            'subsample': [0.8, 1.0]
+        }
+
+        search = RandomizedSearchCV(
+            base_model, param_distributions=param_grid, n_iter=n_iter, 
+            cv=cv, scoring='r2', n_jobs=-1, random_state=42, verbose=1
+        )
+        
+        search.fit(X_train_transformed, y_train)
+        print(f"✅ Best parameters found: {search.best_params_}")
+        
+        self.model = search.best_estimator_
+        print(f"✅ Model trained successfully")
+
     def cross_validate(self, target: str = "log_base_salary", cv: int = 5):
         """Perform cross-validation on validation set."""
         print(f"\nCross-validation on validation set (k={cv})...")
@@ -286,6 +318,15 @@ def main():
     results_rf = model_rf.full_pipeline(model_type="rf")
     results_dict["Random Forest"] = results_rf['r2']
     
+    # Train XGBoost Model
+    print("\n\n🔥 Training and Tuning XGBOOST model...")
+    model_xgb = SalaryPredictionModel(model_type="xgb")
+    model_xgb.load_data()
+    model_xgb.prepare_features()
+    model_xgb.tune_xgboost(n_iter=5, cv=3)  # Runs your hyperparameter tuning
+    results_xgb = model_xgb.evaluate()
+    model_xgb.save_model()
+
     # Compare results
     print("\n\n" + "="*60)
     print("MODEL COMPARISON - TEST SET RESULTS")
@@ -299,6 +340,9 @@ def main():
         print(f"{emoji} {model_name:25s} R² = {r2_score:.4f}")
     
     print("="*60)
+    print(f"Linear Regression R²: {results_lr['r2']:.4f}")
+    print(f"Random Forest R²:     {results_rf['r2']:.4f}")
+    print(f"Tuned XGBoost R²:     {results_xgb['r2']:.4f}")
     print(f"\n✅ Best model: {sorted_results[0][0]} with R² = {sorted_results[0][1]:.4f}")
     print("="*60)
 

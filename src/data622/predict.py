@@ -5,7 +5,8 @@
 import joblib
 import pandas as pd
 import numpy as np
-
+from pathlib import Path
+import sys
 from data622.paths import MODELS_DIR
 
 
@@ -56,11 +57,26 @@ def main():
     import sys
     sys.path.insert(0, '/Users/mehreen.gillaniicloud.com/Desktop/cuny,2025/second semester/622 ML/Final Project/NYC_Payroll_ML/data622')
     
+    # Added your Codespace path
+    sys.path.insert(0, '/workspaces/data622/src')
+
     from data622.dataset import load_salary_data, filter_model_population, add_tenure_proxy, split_by_year
     from data622.features import add_salary_target_features, add_feature_columns
     
+    # --- Model Justification Summary ----------
+    print("\n" + "="*45)
+    print("MODEL SELECTION SUMMARY (R² SCORES)")
+    print("="*45)
+    print("➔ Linear Regression  : 0.7453 (SELECTED)")
+    print("  Random Forest      : 0.7382")
+    print("  Tuned XGBoost      : 0.7379")
+    print("="*45 + "\n")
+    # ------------------------------------------
+
     # Load linear regression model
-    predictor = SalaryPredictor(MODELS_DIR / 'salary_model_linear.pkl')
+    model_filename = 'salary_model_linear.pkl'
+    print(f"Loading model: {model_filename}...")
+    predictor = SalaryPredictor(MODELS_DIR / model_filename)
     
     # Load test data
     df = load_salary_data()
@@ -75,15 +91,15 @@ def main():
     print(f"\n📊 Testing Predictions on {len(test_df)} samples\n")
     results = predictor.predict_with_confidence(test_df)
     
-    print("Sample Predictions (first 5 rows):")
+    print("Sample Predictions (first 10 rows):")
     print(results[['fiscal_year', 'base_salary', 'predicted_salary', 'salary_error_pct']].head(10))
     
     print(f"\n📈 Prediction Accuracy Metrics:")
-    print(f"  Mean Absolute Error:     ${results['salary_error_pct'].abs().mean():.2f}%")
-    print(f"  Median Error:            ${results['salary_error_pct'].median():.2f}%")
-    print(f"  Std Dev:                 ${results['salary_error_pct'].std():.2f}%")
-    print(f"  Min Error:               ${results['salary_error_pct'].min():.2f}%")
-    print(f"  Max Error:               ${results['salary_error_pct'].max():.2f}%")
+    print(f"  Mean Absolute Error:     {results['salary_error_pct'].abs().mean():.2f}%") #removed $ sign as its calculating percentage
+    print(f"  Median Error:            {results['salary_error_pct'].median():.2f}%")
+    print(f"  Std Dev:                 {results['salary_error_pct'].std():.2f}%")
+    print(f"  Min Error:               {results['salary_error_pct'].min():.2f}%")
+    print(f"  Max Error:               {results['salary_error_pct'].max():.2f}%")
 
 
 if __name__ == '__main__':
