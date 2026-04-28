@@ -50,43 +50,6 @@ def group_rare_titles(
     return df
 
 
-# Add year-relative features (Option 3) to handle salary growth across years
-def add_year_relative_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Create salary features relative to year average - handles temporal drift."""
-    df = df.copy()
-    
-    # Calculate salary statistics by fiscal year
-    year_stats = df.groupby('fiscal_year')['base_salary'].agg([
-        ('year_mean_salary', 'mean'),
-        ('year_median_salary', 'median'),
-        ('year_std_salary', 'std')
-    ]).reset_index()
-    
-    # Merge year statistics back to main dataframe
-    df = df.merge(year_stats, on='fiscal_year', how='left')
-    
-    # Feature 1: Salary relative to year average (ratio)
-    df['salary_vs_year_mean'] = df['base_salary'] / df['year_mean_salary'].clip(lower=1)
-    
-    # Feature 2: Salary relative to year median (ratio)
-    df['salary_vs_year_median'] = df['base_salary'] / df['year_median_salary'].clip(lower=1)
-    
-    # Feature 3: Percentile ranking within year (0-1)
-    df['salary_percentile_by_year'] = df.groupby('fiscal_year')['base_salary'].transform(
-        lambda x: x.rank(pct=True)
-    )
-    
-    # Feature 4: Z-score within year (how many std devs from year average)
-    df['salary_z_score_by_year'] = (
-        (df['base_salary'] - df['year_mean_salary']) / df['year_std_salary'].clip(lower=0.1)
-    ).clip(-3, 3)  # Clip extreme outliers
-    
-    # Feature 5: Salary deviation from year mean (in dollars)
-    df['salary_deviation_from_year_mean'] = df['base_salary'] - df['year_mean_salary']
-    
-    return df
-
-
 # Add all engineered features in one step
 def add_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -97,9 +60,6 @@ def add_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
     # Categorical grouping
     df = bucket_tenure(df)
     df = group_rare_titles(df)
-    
-    # Year-relative features (NEW - Option 3)
-    df = add_year_relative_features(df)
     
     # Frequency & size features
     df = add_title_frequency(df)
@@ -132,13 +92,7 @@ def get_model_columns(df: pd.DataFrame):
             "title_frequency",
             "agency_size",
             "title_avg_salary",
-            # NEW: Year-relative features (Option 3)
-            "salary_vs_year_mean",
-            "salary_vs_year_median",
-            "salary_percentile_by_year",
-            "salary_z_score_by_year",
-            "salary_deviation_from_year_mean",
-            # Existing OT & Hours features
+            # NEW: OT & Hours features
             "ot_hours_total",
             "has_ot",
             "ot_pay_ratio",
