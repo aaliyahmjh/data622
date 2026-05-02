@@ -24,14 +24,14 @@ MAX_BASE_SALARY = 500000
 #   3. Add year-relative features (percentile, vs avg)
 #
 # Current split (recommended):
-TRAIN_YEARS = list(range(2021, 2023))  # 2021, 2022 (recent years)
-VALID_YEARS = [2023]
-TEST_YEARS = [2024]
+#TRAIN_YEARS = list(range(2021, 2023))  # 2021, 2022 (recent years)
+#VALID_YEARS = [2023]
+#TEST_YEARS = [2024]
 
 # Alternative: Use all years (if keeping fiscal_year as feature)
-# TRAIN_YEARS = list(range(2015, 2023))  # 2015-2022
-# VALID_YEARS = [2023]
-# TEST_YEARS = [2024]
+TRAIN_YEARS = list(range(2015, 2023))  # 2015-2022
+VALID_YEARS = [2023]
+TEST_YEARS = [2024]
 
 
 # Convert column names to snake case

@@ -25,7 +25,6 @@ from data622.app.loader import load_data_dictionary, load_payroll_data
 st.set_page_config(
     page_title=APP_TITLE,
     page_icon=APP_ICON,
-    page_name="Historical",
     layout="wide",
     initial_sidebar_state="expanded",
 )
