@@ -15,7 +15,7 @@ from data622.app.config import (
     COL_YEARS_SERVICE,
     MODEL_FEATURE_COLS,
 )
-from data622.app.loader import load_model, load_payroll_data
+from data622.app.loader import load_model, load_payroll_data, load_reference_table
 
 st.title("Salary Range Predictor")
 st.caption("Enter job details below to get a projected salary range based on historical NYC payroll data.")
@@ -25,6 +25,7 @@ st.caption("Enter job details below to get a projected salary range based on his
 # ---------------------------------------------------------------------------
 model = load_model()
 df = load_payroll_data()
+reference_df = load_reference_table()
 
 # ---------------------------------------------------------------------------
 # Build input option lists from actual data so partners get accurate dropdowns
@@ -54,6 +55,10 @@ with st.form("prediction_form"):
             step=1,
         )
 
+    pay_basis = st.selectbox("Pay Basis", options=["annual", "hourly"])
+    # TODO (@Mehreen): confirm "pay_basis" is included in get_model_columns() in features.py.
+    # The UI selectbox is already wired; it just needs to be a valid categorical feature column.
+
     submitted = st.form_submit_button("Predict Salary Range", width="stretch")
 
 # ---------------------------------------------------------------------------
@@ -61,6 +66,25 @@ with st.form("prediction_form"):
 # ---------------------------------------------------------------------------
 if submitted:
     st.divider()
+
+    # TODO (@Aali / @Mehreen): wire in reference table lookup before calling the model.
+    # The reference_df is already loaded above (load_reference_table()).
+    # Steps:
+    #   1. Standardize user inputs to match reference table keys (agency_std, title_std).
+    #      Use data622.dataset.clean_text() on agency and job_title strings.
+    #   2. Look up the matching row: ref_row = reference_df[(reference_df["agency_std"] == agency_std)
+    #      & (reference_df["title_std"] == title_std)]
+    #   3. Extract calculated inputs from ref_row:
+    #      median_salary_by_title, median_salary_by_agency, count_of_job_titles,
+    #      regular_hours, current_year
+    #   4. Build a full input DataFrame using all columns from data622.features.get_model_columns()
+    #      (both user inputs + calculated inputs) before passing to model.predict().
+    # See: data622.features.add_reference_features(), data622.features.get_model_columns()
+    if reference_df is None:
+        st.warning(
+            "Reference table not found. Run `uv run python -m data622.train` to generate it. "
+            "Predictions may be inaccurate until calculated features are available."
+        )
 
     if model is None:
         # ── No model loaded — fall back to historical percentiles ────────
@@ -141,6 +165,14 @@ if submitted:
         except Exception as e:
             st.error(f"Prediction failed: {e}")
             st.write("Input passed to model:", input_df)
+
+        st.divider()
+        # TODO (@Miraj Patel): implement get_top_n_coefficients and wire it in here.
+        # Expected signature: get_top_n_coefficients(model, preprocessor, n=10) -> list[tuple[str, float]]
+        # Returns feature names and coefficients sorted by absolute value (descending).
+        # Render as a horizontal bar chart with positive/negative coloring.
+        # Example: st.bar_chart(pd.Series(dict(coefficients)).sort_values())
+        st.info("Model feature coefficients — coming soon.")
 
 st.divider()
 st.caption(
