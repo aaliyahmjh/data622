@@ -13,6 +13,7 @@ from data622.app.config import (
     BOROUGH_COLORS_HEX,
     BOROUGH_COLORS_RGBA,
     BOROUGHS,
+    COL_AGENCY,
     COL_BOROUGH,
     COL_FISCAL_YEAR,
     COL_JOB_TITLE,
@@ -21,6 +22,13 @@ from data622.app.config import (
     YEAR_MIN,
 )
 from data622.app.loader import load_data_dictionary, load_payroll_data
+
+
+def compute_yoy_growth(df, group_col, salary_col, fiscal_year_col, latest_year, prev_year):
+    latest = df[df[fiscal_year_col] == latest_year].groupby(group_col)[salary_col].median()
+    prev = df[df[fiscal_year_col] == prev_year].groupby(group_col)[salary_col].median()
+    return ((latest - prev) / prev * 100).rename("pct_change_yoy")
+
 
 st.set_page_config(
     page_title=APP_TITLE,
@@ -168,6 +176,55 @@ with charts_tab:
             .properties(height=280)
         )
         st.altair_chart(trend, width="stretch")
+
+        st.divider()
+
+        # Year-over-Year Growth
+        st.subheader("Year-over-Year Growth")
+
+        title_growth = compute_yoy_growth(
+            df, COL_JOB_TITLE, COL_SALARY, COL_FISCAL_YEAR,
+            latest_year=YEAR_MAX, prev_year=YEAR_MAX - 1,
+        )
+        title_pct = title_growth.get(selected_title)
+        if title_pct is not None and not (title_pct != title_pct):  # not NaN
+            st.metric(
+                label=f"Median Salary Growth — {selected_title}",
+                value=f"{title_pct:+.1f}%",
+                delta=f"vs {YEAR_MAX - 1}",
+            )
+        else:
+            st.caption("Insufficient data to compute YoY growth for this title.")
+
+        agency_growth = compute_yoy_growth(
+            df[df[COL_JOB_TITLE] == selected_title],
+            COL_AGENCY, COL_SALARY, COL_FISCAL_YEAR,
+            latest_year=YEAR_MAX, prev_year=YEAR_MAX - 1,
+        ).dropna().sort_values(ascending=False)
+
+        if not agency_growth.empty:
+            st.caption(f"Median salary growth by agency for **{selected_title}** ({YEAR_MAX - 1} → {YEAR_MAX})")
+            agency_growth_df = agency_growth.reset_index()
+            agency_growth_df.columns = ["Agency", "% Change"]
+            agency_bar = (
+                alt.Chart(agency_growth_df.head(10))
+                .mark_bar()
+                .encode(
+                    alt.X("% Change:Q", title="% Change in Median Salary", axis=alt.Axis(format="+.1f")),
+                    alt.Y("Agency:N", sort="-x", title=None),
+                    alt.Color(
+                        "% Change:Q",
+                        scale=alt.Scale(scheme="redyellowgreen", domainMid=0),
+                        legend=None,
+                    ),
+                    tooltip=[
+                        alt.Tooltip("Agency:N", title="Agency"),
+                        alt.Tooltip("% Change:Q", title="% Change", format="+.1f"),
+                    ],
+                )
+                .properties(height=max(200, len(agency_growth_df.head(10)) * 28))
+            )
+            st.altair_chart(agency_bar, width="stretch")
 
         st.divider()
 

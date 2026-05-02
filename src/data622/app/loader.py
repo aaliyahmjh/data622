@@ -16,6 +16,9 @@ from data622.app.config import (
     YEAR_MAX,
     YEAR_MIN,
 )
+from data622.paths import PROCESSED_DATA_DIR
+
+REFERENCE_TABLE_FILE = PROCESSED_DATA_DIR / "reference_table.csv"
 
 
 @st.cache_data(show_spinner="Loading payroll data…")
@@ -69,6 +72,25 @@ def load_model():
         return None
     with open(model_path, "rb") as f:
         return pickle.load(f)
+
+
+@st.cache_data(show_spinner="Loading reference table…")
+def load_reference_table() -> pd.DataFrame | None:
+    """
+    Load the static reference table of aggregated salary stats by title/agency.
+
+    Built from training data by `uv run python -m data622.train` and saved to
+    PROCESSED_DATA_DIR/reference_table.csv.
+
+    TODO (@Aali John-Harry): ensure the train pipeline outputs reference_table.csv
+    to data/processed/ before this function can return data.
+
+    Returns None if the file does not exist yet.
+    """
+    path = Path(REFERENCE_TABLE_FILE)
+    if not path.exists():
+        return None
+    return pd.read_csv(path)
 
 
 @st.cache_data(show_spinner="Loading data dictionary…")
