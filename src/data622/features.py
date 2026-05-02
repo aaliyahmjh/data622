@@ -64,11 +64,6 @@ def add_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
     # Frequency & size features
     df = add_title_frequency(df)
     df = add_agency_size(df)
-    df = add_title_avg_salary(df)
-    
-    # NEW: overtime features (only if ot_hours exists)
-    if "ot_hours" in df.columns:
-        df = add_ot_features(df)
 
     return df
 
@@ -77,48 +72,29 @@ def add_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
 def get_model_columns(df: pd.DataFrame):
     categorical_features = [
         c for c in [
-            "agency_std", 
-            "title_category", 
+            "agency_std",
+            "title_std",
+            "title_category",
             "title_std_grouped",
             "tenure_bucket",
-            "borough_std",
-            "employment_type_std"
+            "pay_basis",
         ] if c in df.columns
     ]
+
     numeric_features = [
         c for c in [
             "fiscal_year",
             "tenure_years",
             "title_frequency",
             "agency_size",
-            "title_avg_salary",
-            # NEW: OT & Hours features
-            "ot_hours_total",
-            "has_ot",
-            "ot_pay_ratio",
-            "regular_hours_worked",
-            "is_full_time_hours",
-            "hours_reliable",
-            # NEW: Pay composition
-            "other_pay_amount",
-            "has_other_pay",
-            "pay_other_ratio",
-            "gross_to_base_ratio",
-            # NEW: Agency stats
-            "agency_median_salary",
-            "agency_salary_std",
-            "salary_percentile_in_agency",
-            # NEW: Title stats
-            "title_median_salary",
-            "title_min_salary",
-            "title_max_salary",
-            "salary_deviation_from_title",
-            # NEW: Temporal
-            "years_since_start",
-            "year_avg_salary",
-            "is_full_year"
+            "median_salary_by_title",
+            "median_salary_by_agency",
+            "count_of_job_titles",
+            "current_year",
+            "regular_hours",
         ] if c in df.columns
     ]
+
     return categorical_features, numeric_features
 
 
@@ -150,6 +126,49 @@ def make_preprocessor(df: pd.DataFrame) -> ColumnTransformer:
 
     return preprocessor
 
+# static reference table from training/current-year data only
+def build_reference_table(
+    df: pd.DataFrame,
+    current_year: int | None = None,
+) -> pd.DataFrame:
+    df = df.copy()
+
+    if current_year is None:
+        current_year = int(df["fiscal_year"].max())
+
+    current_df = df[df["fiscal_year"] == current_year].copy()
+
+    title_stats = (
+        current_df.groupby("title_std")
+        .agg(
+            median_salary_by_title=("base_salary", "median"),
+            count_of_job_titles=("title_std", "size"),
+        )
+        .reset_index()
+    )
+
+    agency_stats = (
+        current_df.groupby("agency_std")
+        .agg(
+            median_salary_by_agency=("base_salary", "median")
+        )
+        .reset_index()
+    )
+
+    title_agency_stats = (
+        current_df.groupby(["agency_std", "title_std"])
+        .agg(
+            agency_title_count=("title_std", "size"),
+            regular_hours=("regular_hours", "median"),
+        )
+        .reset_index()
+    )
+
+    ref = title_agency_stats.merge(title_stats, on="title_std", how="left")
+    ref = ref.merge(agency_stats, on="agency_std", how="left")
+    ref["current_year"] = current_year
+
+    return ref
 
 # Feature: how common each job title is
 def add_title_frequency(df):
@@ -167,31 +186,41 @@ def add_agency_size(df):
     return df
 
 
-# Feature: average salary per job title 
-def add_title_avg_salary(df):
-    df = df.copy()
-    title_avg = df.groupby("title_std")["base_salary"].mean()
-    df["title_avg_salary"] = df["title_std"].map(title_avg)
-
-    return df
-
-
-
 # Feature: overtime hours worked (proxy for workload/seniority) - Added
 def add_ot_features(df):
     df = df.copy()
-    
-    # Total OT hours (many nulls, so fill with 0)
-    df["ot_hours_total"] = df["ot_hours"].fillna(0)
-    
-    # Whether employee has OT (binary indicator)
-    df["has_ot"] = (df["ot_hours_total"] > 0).astype(int)
-    
-    # OT pay ratio (OT paid / base salary) - workers with high OT get premium
-    df["ot_pay_ratio"] = (df["total_ot_paid"].fillna(0) / df["base_salary"].clip(lower=1)).clip(upper=1.0)
-    
+
+    if "ot_hours" in df.columns:
+        df["ot_hours_total"] = df["ot_hours"].fillna(0)
+        df["has_ot"] = (df["ot_hours_total"] > 0).astype(int)
+
     return df
 
+# Feature:  merge reference features into model data
+def add_reference_features(
+    df: pd.DataFrame,
+    reference_df: pd.DataFrame,
+) -> pd.DataFrame:
+    df = df.copy()
 
+    lookup_cols = [
+        "agency_std",
+        "title_std",
+        "median_salary_by_title",
+        "median_salary_by_agency",
+        "count_of_job_titles",
+        "agency_title_count",
+        "regular_hours",
+        "current_year",
+    ]
 
+    existing_lookup_cols = [c for c in lookup_cols if c in reference_df.columns]
+
+    df = df.merge(
+        reference_df[existing_lookup_cols],
+        on=["agency_std", "title_std"],
+        how="left",
+    )
+
+    return df
 
