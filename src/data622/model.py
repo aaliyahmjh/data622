@@ -8,10 +8,11 @@ import pandas as pd
 from pathlib import Path
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import cross_val_score, KFold, GridSearchCV
+from sklearn.model_selection import cross_val_score, KFold, GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from xgboost import XGBRegressor
 import joblib
+import shutil
 
 from data622.paths import PROCESSED_DATA_DIR
 from data622.features import make_preprocessor, get_model_columns
@@ -301,6 +302,7 @@ def main():
     model_ridge.cross_validate()
     results_ridge = model_ridge.evaluate()
     results_dict["Ridge Regression"] = results_ridge['r2']
+    model_ridge.save_model()
     
     # Train Lasso Regression model with tuning
     print("\n\n🟡 Training LASSO REGRESSION model (with hyperparameter tuning)...")
@@ -311,12 +313,14 @@ def main():
     model_lasso.cross_validate()
     results_lasso = model_lasso.evaluate()
     results_dict["Lasso Regression"] = results_lasso['r2']
+    model_lasso.save_model()
     
     # Train Random Forest model
     print("\n\n🟢 Training RANDOM FOREST model...")
     model_rf = SalaryPredictionModel(model_type="rf")
     results_rf = model_rf.full_pipeline(model_type="rf")
     results_dict["Random Forest"] = results_rf['r2']
+    
     
     # Train XGBoost Model
     print("\n\n🔥 Training and Tuning XGBOOST model...")
@@ -343,7 +347,34 @@ def main():
     print(f"Linear Regression R²: {results_lr['r2']:.4f}")
     print(f"Random Forest R²:     {results_rf['r2']:.4f}")
     print(f"Tuned XGBoost R²:     {results_xgb['r2']:.4f}")
-    print(f"\n✅ Best model: {sorted_results[0][0]} with R² = {sorted_results[0][1]:.4f}")
+    
+    # Save the best model as the champion, record for predict.py
+    best_model_name = sorted_results[0][0]
+    best_score = sorted_results[0][1]
+    
+    print(f"\n✅ Best model: {best_model_name} with R² = {best_score:.4f}")
+
+    file_map = {
+        "Linear Regression": "salary_model_linear.pkl",
+        "Ridge Regression": "salary_model_ridge.pkl",
+        "Lasso Regression": "salary_model_lasso.pkl",
+        "Random Forest": "salary_model_rf.pkl",
+        "XGBoost": "salary_model_xgb.pkl" # Make sure this matches your exact dictionary key for XGBoost!
+    }
+    
+    best_file = file_map.get(best_model_name)
+    
+    if best_file:
+        models_dir = Path("models")
+        source_path = models_dir / best_file
+        dest_path = models_dir / "salary_model_best.pkl"
+        
+        if source_path.exists():
+            shutil.copy(source_path, dest_path)
+            print(f"🏆 Champion saved! Copied {best_file} to salary_model_best.pkl")
+        else:
+            print(f"❌ Warning: Could not find {source_path} to create master model.")
+
     print("="*60)
 
 

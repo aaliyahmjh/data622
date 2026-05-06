@@ -1,106 +1,113 @@
-##########################################
-# predict.py - Predicting on new data
-##########################################
-
-import joblib
-import pandas as pd
 import numpy as np
-from pathlib import Path
-import sys
-from data622.paths import MODELS_DIR
+import pandas as pd
+import joblib
+import os
 
 
-class SalaryPredictor:
-    """Load trained model and make predictions on new payroll data."""
-    
-    def __init__(self, model_path):
-        """Load serialized model, preprocessor, and feature info."""
-        self.model_data = joblib.load(model_path)
-        self.model = self.model_data['model']
-        self.preprocessor = self.model_data['preprocessor']
-        self.feature_cols = self.model_data['feature_cols']
-        self.cat_cols = self.model_data['cat_cols']
-        self.num_cols = self.model_data['num_cols']
+def cast_to_string(x):
+    return x.astype(str)
+
+class NYCSalaryStabilizer:
+    def __init__(self, model_path="models/salary_model_best.pkl", 
+                 ref_table_path="data/processed/reference_table.csv"):
+        if not os.path.exists(model_path):
+            print(f"⚠️ Champion model not found at {model_path}.")
+            # Backup file is the linear model
+            if os.path.exists("models/salary_model_linear.pkl"):
+                print("Falling back to linear model for now...")
+                model_path = "models/salary_model_linear.pkl"
+            else:
+                raise FileNotFoundError("❌ No models found!")
+            
+        print(f"Loading model: {model_path}")
+        bundle = joblib.load(model_path)
+        self.model = bundle["model"]
+        self.preprocessor = bundle["preprocessor"]
+        self.feature_cols = bundle["feature_cols"]
         
-    def predict(self, df):
-        """Predict log_base_salary on new data."""
-        # Use only the required feature columns
-        X = df[self.feature_cols].copy()
-        
-        # Preprocess features
-        X_processed = self.preprocessor.transform(X)
-        
-        # Make predictions (log scale)
-        log_predictions = self.model.predict(X_processed)
-        
-        # Transform back to original salary scale
-        salary_predictions = np.exp(log_predictions)
-        
-        return salary_predictions, log_predictions
-    
-    def predict_with_confidence(self, df):
-        """Predict with log-scale predictions for reference."""
-        salaries, log_salaries = self.predict(df)
-        
-        result = df[['fiscal_year', 'base_salary']].copy()
-        result['predicted_salary'] = salaries
-        result['predicted_log_salary'] = log_salaries
-        result['actual_log_salary'] = np.log(df['base_salary'])
-        result['log_error'] = result['predicted_log_salary'] - result['actual_log_salary']
-        result['salary_error_pct'] = (result['predicted_salary'] - df['base_salary']) / df['base_salary'] * 100
-        
-        return result
+        print(f"Loading reference data: {ref_table_path}")
+        self.ref_table = pd.read_csv(ref_table_path)
 
+    def predict_median_adjusted(self, user_input, model_weight=0.7):
+        """
+        Runs a prediction and adjusts it against the median salary for that title.
+        This prevents the model from giving unrealistic results for 2024.
+        """
+        # Cap tenure at 20 years
+        user_input['tenure_years'] = min(user_input.get('tenure_years', 0), 20)
+        
+        # Convert input to DataFrame and merge with median stats
+        input_df = pd.DataFrame([user_input])
+        input_df = input_df.merge(self.ref_table, on=['agency_std', 'title_std'], how='left')
+        input_df = input_df.fillna(0)
+        
+        # Tenure Bucket
+        input_df["tenure_bucket"] = pd.cut(
+            input_df["tenure_years"],
+            bins=[-np.inf, 0, 1, 3, 5, 10, 20, np.inf],
+            labels=["0", "1", "2-3", "4-5", "6-10", "11-20", "20+"]
+        ).astype(str)
 
-def main():
-    """Example: Load model and predict on test data."""
-    import sys
-    sys.path.insert(0, '/Users/mehreen.gillaniicloud.com/Desktop/cuny,2025/second semester/622 ML/Final Project/NYC_Payroll_ML/data622')
-    
-    # Added your Codespace path
-    sys.path.insert(0, '/workspaces/data622/src')
+        # Title Category 
+        # User input doesn't match, default to 'Unknown'
+        if 'title_category' not in input_df.columns:
+            input_df['title_category'] = 'Unknown'
 
-    from data622.dataset import load_salary_data, filter_model_population, add_tenure_proxy, split_by_year
-    from data622.features import add_salary_target_features, add_feature_columns
-    
-    # --- Model Justification Summary ----------
-    print("\n" + "="*45)
-    print("MODEL SELECTION SUMMARY (R² SCORES)")
-    print("="*45)
-    print("➔ Linear Regression  : 0.7453 (SELECTED)")
-    print("  Random Forest      : 0.7382")
-    print("  Tuned XGBoost      : 0.7379")
-    print("="*45 + "\n")
-    # ------------------------------------------
+        # Group Rare Titles
+        # Look at the historical count from the reference table
+        job_count = input_df['count_of_job_titles'].values[0]
+        input_df['title_std_grouped'] = input_df['title_std'] if job_count >= 100 else 'other_title'
 
-    # Load linear regression model
-    model_filename = 'salary_model_linear.pkl'
-    print(f"Loading model: {model_filename}...")
-    predictor = SalaryPredictor(MODELS_DIR / model_filename)
-    
-    # Load test data
-    df = load_salary_data()
-    df = filter_model_population(df)
-    df = add_tenure_proxy(df)
-    df = add_salary_target_features(df)
-    df = add_feature_columns(df)
-    
-    _, _, test_df = split_by_year(df)
-    
-    # Make predictions
-    print(f"\n📊 Testing Predictions on {len(test_df)} samples\n")
-    results = predictor.predict_with_confidence(test_df)
-    
-    print("Sample Predictions (first 10 rows):")
-    print(results[['fiscal_year', 'base_salary', 'predicted_salary', 'salary_error_pct']].head(10))
-    
-    print(f"\n📈 Prediction Accuracy Metrics:")
-    print(f"  Mean Absolute Error:     {results['salary_error_pct'].abs().mean():.2f}%") #removed $ sign as its calculating percentage
-    print(f"  Median Error:            {results['salary_error_pct'].median():.2f}%")
-    print(f"  Std Dev:                 {results['salary_error_pct'].std():.2f}%")
-    print(f"  Min Error:               {results['salary_error_pct'].min():.2f}%")
-    print(f"  Max Error:               {results['salary_error_pct'].max():.2f}%")
+        # Title Frequency 
+        input_df['title_frequency'] = job_count
 
+        # 5. Agency Size (This wasn't saved in the ref_table, so use a fallback average)
+        if 'agency_size' not in input_df.columns:
+            input_df['agency_size'] = 1000
 
-if __name__ == '__main__':
-    main()
+        # Convert from Log to Dollars
+        X_tf = self.preprocessor.transform(input_df[self.feature_cols])
+        log_pred = self.model.predict(X_tf)[0]
+        model_raw_dollars = np.exp(log_pred)
+        
+        # Median Adjustment Logic
+        historical_median = input_df['median_salary_by_title'].values[0]
+        
+        if historical_median > 0:
+            # Mix 70% model and 30% historical median
+            final_salary = (model_raw_dollars * model_weight) + (historical_median * (1 - model_weight))
+        else:
+            # If it's a brand new title, we trust the model alone
+            final_salary = model_raw_dollars
+
+        return {
+            "expected_salary": round(final_salary, 2),
+            "historical_median": round(historical_median, 2),
+            "model_prediction_raw": round(model_raw_dollars, 2)
+        }
+
+if __name__ == "__main__":
+    # Internal Test Run
+    try:
+        stabilizer = NYCSalaryStabilizer()
+        
+        # Example
+        sample_query = {
+            'agency_std': 'police department', 
+            'title_std': 'clerk', 
+            'tenure_years': 5,
+            'fiscal_year': 2024
+        }
+        
+        result = stabilizer.predict_median_adjusted(sample_query)
+        
+        print("\n" + "="*40)
+        print("NYC SALARY STABILIZER: TEST RESULT")
+        print("="*40)
+        print(f"Model Raw Guess:    ${result['model_prediction_raw']:,}")
+        print(f"Historical Median:  ${result['historical_median']:,}")
+        print(f"Adjusted Salary:    ${result['expected_salary']:,}")
+        print("="*40)
+        
+    except Exception as e:
+        print(f"❌ Could not run test: {e}")
