@@ -6,7 +6,7 @@ from __future__ import annotations
 import pandas as pd
 from pathlib import Path
 
-from data622.paths import PROCESSED_DATA_DIR
+from .paths import PROCESSED_DATA_DIR
 
 # Default input file 
 DEFAULT_INPUT_FILE = PROCESSED_DATA_DIR / "nyc_payroll_combined_all_2015_2024.csv"
@@ -81,6 +81,11 @@ def filter_model_population(df: pd.DataFrame) -> pd.DataFrame:
         "regular_hours",
         "work_location_borough",
         "ot_pay_ratio"
+        "ot_hours",
+        "total_ot_paid",
+        "total_other_pay",
+        "employee_agency_tenure",
+        
     ]
     existing_cols = [c for c in required_cols if c in df.columns]
     df = df[existing_cols].copy()
