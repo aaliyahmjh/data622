@@ -98,6 +98,10 @@ class SalaryPredictor:
             'feature_count': len(self.feature_cols) if self.feature_cols else 0
         }
 
+        # Group Rare Titles
+        # Look at the historical count from the reference table
+        job_count = input_df['count_of_job_titles'].values[0]
+        input_df['title_std_grouped'] = input_df['title_std'] if job_count >= 100 else 'other_title'
 
 def get_all_models_performance():
     """
@@ -327,6 +331,11 @@ def predict_for_app(user_inputs: pd.DataFrame, model_name=None):
     
     return salaries, log_salaries, model_info
 
+        return {
+            "expected_salary": round(final_salary, 2),
+            "historical_median": round(historical_median, 2),
+            "model_prediction_raw": round(model_raw_dollars, 2)
+        }
 
 if __name__ == '__main__':
     main()

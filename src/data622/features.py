@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, FunctionTransformer
 
 
 # Add log-transformed salary (for skewed distribution)
@@ -97,6 +97,9 @@ def get_model_columns(df: pd.DataFrame):
 
     return categorical_features, numeric_features
 
+# Helper function to convert all categorical features to string type for OneHotEncoder
+def cast_to_string(x):
+    return x.astype(str)
 
 # Build preprocessing pipeline
 def make_preprocessor(df: pd.DataFrame) -> ColumnTransformer:
@@ -104,6 +107,7 @@ def make_preprocessor(df: pd.DataFrame) -> ColumnTransformer:
 
     categorical_pipeline = Pipeline(
         steps=[
+            ("cast_to_str", FunctionTransformer(cast_to_string)),
             ("imputer", SimpleImputer(strategy="most_frequent")),
             ("onehot", OneHotEncoder(handle_unknown="ignore")),
         ]
