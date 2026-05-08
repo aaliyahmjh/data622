@@ -1,4 +1,3 @@
-from data622.config import *  # noqa: F401, F403 - re-export project-level constants
 from data622.paths import (
     MODELS_DIR,
     PROCESSED_DATA_DIR,
@@ -6,24 +5,25 @@ from data622.paths import (
 )
 
 # Processed Data files
-DATA_FILE = PROCESSED_DATA_DIR / "dummy_data.csv"
+REFERENCE_TABLE_FILE = PROCESSED_DATA_DIR / "reference_table.csv"
+TRAIN_SET_FILE = PROCESSED_DATA_DIR / "train_set.csv"
+VALID_SET_FILE = PROCESSED_DATA_DIR / "valid_set.csv"
+TEST_SET_FILE = PROCESSED_DATA_DIR / "test_set.csv"
 
 # Model file
-MODEL_FILE = MODELS_DIR / "salary_model.pkl"
-
+MODEL_FILE = MODELS_DIR / "salary_model_linear.pkl"
 
 DATA_DICT_FILE = REFERENCES_DIR / "data_dictionary.csv"
 
 
 # Column name mapping
-# update strings with expected names
-COL_JOB_TITLE = "title_description"
-COL_AGENCY = "agency_name"
-COL_BOROUGH = "work_location_borough"
+COL_JOB_TITLE = "title_std"
+COL_AGENCY = "agency_std"
 COL_SALARY = "base_salary"
 COL_FISCAL_YEAR = "fiscal_year"
-COL_YEARS_SERVICE = "years_of_service"
 COL_PAY_BASIS = "pay_basis"
+COL_BOROUGH = "work_location_borough"
+COL_YEARS_SERVICE = "tenure_years"
 
 
 BOROUGHS = ["MANHATTAN", "BROOKLYN", "QUEENS", "BRONX", "STATEN ISLAND"]
@@ -31,32 +31,24 @@ BOROUGHS = ["MANHATTAN", "BROOKLYN", "QUEENS", "BRONX", "STATEN ISLAND"]
 # Consistent borough colors used across all visualizations.
 # Hex values for Altair; RGBA lists (0-255) for pydeck.
 BOROUGH_COLORS_HEX: dict[str, str] = {
-    "MANHATTAN":     "#0d6e7a",  # teal
-    "BROOKLYN":      "#5b4a9e",  # purple
-    "QUEENS":        "#b84040",  # red
-    "BRONX":         "#e8557a",  # pink
+    "MANHATTAN": "#0d6e7a",  # teal
+    "BROOKLYN": "#5b4a9e",  # purple
+    "QUEENS": "#b84040",  # red
+    "BRONX": "#e8557a",  # pink
     "STATEN ISLAND": "#e8a830",  # amber
 }
 
 BOROUGH_COLORS_RGBA: dict[str, list[int]] = {
-    "MANHATTAN":     [ 13, 110, 122, 200],
-    "BROOKLYN":      [ 91,  74, 158, 200],
-    "QUEENS":        [184,  64,  64, 200],
-    "BRONX":         [232,  85, 122, 200],
-    "STATEN ISLAND": [232, 168,  48, 200],
+    "MANHATTAN": [13, 110, 122, 200],
+    "BROOKLYN": [91, 74, 158, 200],
+    "QUEENS": [184, 64, 64, 200],
+    "BRONX": [232, 85, 122, 200],
+    "STATEN ISLAND": [232, 168, 48, 200],
 }
 
 # Set year ranges for charts
 YEAR_MIN = 2015
 YEAR_MAX = 2024
-
-# Model features - what we expect users to input for predictions
-MODEL_FEATURE_COLS = [
-    COL_JOB_TITLE,
-    COL_AGENCY,
-    COL_BOROUGH,
-    COL_YEARS_SERVICE,
-]
 
 # App constants
 APP_TITLE = "NYC Payroll Dashboard"

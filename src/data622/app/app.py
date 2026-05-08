@@ -1,8 +1,11 @@
-# Entry point — Job Discovery
+##########################################
+# app.py - NYC Payroll Salary Predictor
 # Run with: uv run streamlit run src/data622/app/app.py
+##########################################
 
 import altair as alt
-import pydeck as pdk
+import numpy as np
+import pandas as pd
 import streamlit as st
 
 from data622.app.config import (
@@ -10,26 +13,23 @@ from data622.app.config import (
     APP_ICON,
     APP_SUBTITLE,
     APP_TITLE,
-    BOROUGH_COLORS_HEX,
-    BOROUGH_COLORS_RGBA,
-    BOROUGHS,
     COL_AGENCY,
-    COL_BOROUGH,
-    COL_FISCAL_YEAR,
     COL_JOB_TITLE,
     COL_SALARY,
     YEAR_MAX,
-    YEAR_MIN,
 )
-from data622.app.loader import load_data_dictionary, load_payroll_data
+from data622.app.loader import (
+    load_model,
+    load_reference_table,
+    load_title_category_map,
+    load_yoy_summary,
+)
+from data622.dataset import clean_text
+from data622.features import bucket_tenure
 
-
-def compute_yoy_growth(df, group_col, salary_col, fiscal_year_col, latest_year, prev_year):
-    latest = df[df[fiscal_year_col] == latest_year].groupby(group_col)[salary_col].median()
-    prev = df[df[fiscal_year_col] == prev_year].groupby(group_col)[salary_col].median()
-    return ((latest - prev) / prev * 100).rename("pct_change_yoy")
-
-
+# ---------------------------------------------------------------------------
+# Page config
+# ---------------------------------------------------------------------------
 st.set_page_config(
     page_title=APP_TITLE,
     page_icon=APP_ICON,
@@ -37,306 +37,407 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Override selected tab color to be readable against the dark theme
-st.markdown(
-    """
-    <style>
-    .stTabs [aria-selected="true"] {
-        color: #80cbc4 !important;
-        border-bottom-color: #80cbc4 !important;
-    }
-    .stDataFrame thead tr th {
-        background-color: #2d3748 !important;
-        color: #f0f0f0 !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
+# ---------------------------------------------------------------------------
+# Load resources (cached)
+# ---------------------------------------------------------------------------
+predictor = load_model()
+reference_df = load_reference_table()
+title_category_map = load_title_category_map()
+yoy_df = load_yoy_summary()
+
+# ---------------------------------------------------------------------------
+# Build lookup structures from reference table
+# ---------------------------------------------------------------------------
+if reference_df is not None:
+    all_titles: list[str] = sorted(
+        t.title() for t in reference_df[COL_JOB_TITLE].dropna().unique()
+    )
+    # title-cased title -> list of title-cased agencies (display values; clean_text lowercases for lookup)
+    title_to_agencies: dict[str, list[str]] = (
+        reference_df.groupby(COL_JOB_TITLE)[COL_AGENCY]
+        .apply(lambda s: sorted(a.title() for a in s.dropna().unique()))
+        .to_dict()
+    )
+    # remap keys to title-case to match selectbox return values
+    title_to_agencies = {k.title(): v for k, v in title_to_agencies.items()}
+    # precompute title_frequency and agency_size — keyed by lowercase (matches clean_text output)
+    title_frequency: dict[str, int] = (
+        reference_df.groupby(COL_JOB_TITLE)["agency_title_count"].sum().to_dict()
+    )
+    agency_size: dict[str, int] = (
+        reference_df.groupby(COL_AGENCY)["agency_title_count"].sum().to_dict()
+    )
+else:
+    all_titles = []
+    title_to_agencies = {}
+    title_frequency = {}
+    agency_size = {}
+
+# ---------------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------------
 st.title(APP_TITLE)
 st.subheader(APP_SUBTITLE)
 
-col1, col2, col3 = st.columns(3, border=True)
-with col1:
-    st.markdown("### Research real job data by title, salary, or career path")
-with col2:
-    st.markdown("### Explore jobs and salaries specific to your borough")
-with col3:
-    st.markdown("### Project your career path and predicted salary range")
 
-st.divider()
+if reference_df is None:
+    st.error(
+        "Reference table not found at `data/processed/reference_table.csv`. "
+        "Run `uv run python -m data622.train` to generate it."
+    )
+    st.stop()
 
-st.subheader("Job Discovery")
-st.markdown(
-    "Explore salaries for jobs with the City of New York. Use the sidebar to change jobs.\n\n Go to [Salary Predictor](./2_predict) for projections."
-)
-
-df = load_payroll_data()
-
-# Sidebar filters
+# ---------------------------------------------------------------------------
+# Input form — sidebar
+# ---------------------------------------------------------------------------
 with st.sidebar:
-    st.header("Filters")
+    st.subheader("Enter Your Job Details")
 
-    all_titles = sorted(df[COL_JOB_TITLE].dropna().unique().tolist())
-    selected_title = st.selectbox("Job Title", options=all_titles, index=0)
-
-    selected_boroughs = st.multiselect(
-        "Borough",
-        options=BOROUGHS,
-        default=BOROUGHS,
+    job_title = st.selectbox(
+        "Job Title",
+        options=all_titles,
+        index=None,
+        placeholder="Select job title…",
     )
 
-    year_range = st.slider(
-        "Fiscal Year",
-        min_value=YEAR_MIN,
-        max_value=YEAR_MAX,
-        value=(YEAR_MIN, YEAR_MAX),
+    agency_options = title_to_agencies.get(job_title, []) if job_title else []
+    agency = st.selectbox(
+        "Agency",
+        options=agency_options,
+        index=None,
+        placeholder="Select agency…",
+        disabled=not bool(job_title),
     )
 
-# Apply filters
-mask = (
-    (df[COL_JOB_TITLE] == selected_title)
-    & (df[COL_BOROUGH].isin(selected_boroughs))
-    & (df[COL_FISCAL_YEAR].between(*year_range))
-)
-filtered = df[mask].copy()
+    tenure = st.number_input(
+        "Years in Current Role",
+        min_value=0,
+        max_value=40,
+        value=5,
+        step=1,
+    )
 
-# Tabs
-charts_tab, dict_tab = st.tabs(["Charts", "Data Dictionary"])
+    predict_clicked = st.button(
+        "Predict Salary", type="primary", use_container_width=True
+    )
 
-# Chart tab
-with charts_tab:
-    if filtered.empty:
-        st.warning("No data matches the current filters.")
-    else:
-        # Salary Distribution
-        st.subheader("Salary Distribution")
+# ---------------------------------------------------------------------------
+# Prediction + output
+# ---------------------------------------------------------------------------
+if predict_clicked:
+    if not job_title or not agency:
+        st.warning("Please select both a Job Title and an Agency before predicting.")
+        st.stop()
 
-        hist = (
-            alt.Chart(filtered)
-            .mark_bar(opacity=0.8)
-            .encode(
-                alt.X(
-                    f"{COL_SALARY}:Q",
-                    bin=alt.Bin(maxbins=40),
-                    title="Base Salary ($)",
-                    axis=alt.Axis(format="$,.0f"),
-                ),
-                alt.Y("count()", title="Number of Employees"),
-                alt.Color(
-                    f"{COL_BOROUGH}:N",
-                    title="Borough",
-                    scale=alt.Scale(
-                        domain=list(BOROUGH_COLORS_HEX.keys()),
-                        range=list(BOROUGH_COLORS_HEX.values()),
-                    ),
-                ),
-                tooltip=[
-                    alt.Tooltip(f"{COL_SALARY}:Q", title="Salary Bin", format="$,.0f"),
-                    alt.Tooltip("count()", title="Count"),
-                    alt.Tooltip(f"{COL_BOROUGH}:N", title="Borough"),
-                ],
-            )
-            .properties(height=300)
-            .interactive()
+    # Standardize inputs to match reference table keys
+    title_std = clean_text(pd.Series([job_title]))[0]
+    agency_std = clean_text(pd.Series([agency]))[0]
+
+    # Reference table lookup
+    ref_row = reference_df[
+        (reference_df[COL_JOB_TITLE] == title_std)
+        & (reference_df[COL_AGENCY] == agency_std)
+    ]
+
+    if ref_row.empty:
+        st.warning(
+            f"No reference data found for **{job_title}** at **{agency}**. "
+            "Try a different title/agency combination."
         )
-        st.altair_chart(hist, width="stretch")
+        st.stop()
 
-        st.divider()
+    ref = ref_row.iloc[0]
 
-        # Salary Trend line chart
-        st.subheader("Median Salary Trend by Year")
+    # Build model input row
+    tenure_df = pd.DataFrame({"tenure_years": [int(tenure)]})
+    tenure_df = bucket_tenure(tenure_df)
+    tenure_bucket_val = str(tenure_df["tenure_bucket"].iloc[0])
 
-        trend_df = (
-            filtered.groupby(COL_FISCAL_YEAR)[COL_SALARY]
+    title_freq = int(title_frequency.get(title_std, ref.get("agency_title_count", 1)))
+    agency_sz = int(agency_size.get(agency_std, 1))
+    title_cat = title_category_map.get(title_std, "other")
+    agency_title_cnt = int(ref.get("agency_title_count", 1))
+    title_grouped = title_std if agency_title_cnt >= 100 else "other_title"
+
+    input_row = {
+        "agency_std": agency_std,
+        "title_std": title_std,
+        "title_category": title_cat,
+        "title_std_grouped": title_grouped,
+        "tenure_bucket": tenure_bucket_val,
+        "fiscal_year": YEAR_MAX,
+        "tenure_years": int(tenure),
+        "title_frequency": title_freq,
+        "agency_size": agency_sz,
+        "median_salary_by_title": float(ref["median_salary_by_title"]),
+        "median_salary_by_agency": float(ref["median_salary_by_agency"]),
+        "count_of_job_titles": float(ref.get("count_of_job_titles", 1)),
+        "current_year": float(ref.get("current_year", 2022)),
+        "regular_hours": float(ref.get("regular_hours", 1820)),
+    }
+    input_df = pd.DataFrame([input_row])
+
+    st.divider()
+
+    # ── A. Role Summary with inline YoY deltas ───────────────────────────────
+    st.subheader(f"Role Summary — {job_title.title()}")
+
+    # Compute YoY deltas to show as metric deltas
+    title_growth: float | None = None
+    agency_growth: float | None = None
+    yoy_label = ""
+    if yoy_df is not None:
+        latest_year = int(yoy_df["fiscal_year"].max())
+        prev_year = latest_year - 1
+        yoy_label = f"{prev_year} → {latest_year}"
+
+        def _get_yoy(
+            df: pd.DataFrame, filter_col: str, filter_val: str, metric_col: str
+        ) -> float | None:
+            mask = df[filter_col] == filter_val
+            latest_val = df[(df["fiscal_year"] == latest_year) & mask][metric_col]
+            prev_val = df[(df["fiscal_year"] == prev_year) & mask][metric_col]
+            if latest_val.empty or prev_val.empty:
+                return None
+            prev_med = (
+                prev_val.iloc[0]
+                if metric_col in ("headcount", "regular_hours")
+                else prev_val.median()
+            )
+            latest_med = (
+                latest_val.iloc[0]
+                if metric_col in ("headcount", "regular_hours")
+                else latest_val.median()
+            )
+            if prev_med == 0:
+                return None
+            return float((latest_med - prev_med) / prev_med * 100)
+
+        agency_yoy_df = yoy_df[yoy_df[COL_JOB_TITLE] == title_std]
+        title_growth = _get_yoy(yoy_df, COL_JOB_TITLE, title_std, "base_salary")
+        agency_growth = _get_yoy(agency_yoy_df, COL_AGENCY, agency_std, "base_salary")
+        headcount_growth = _get_yoy(agency_yoy_df, COL_AGENCY, agency_std, "headcount")
+        hours_growth = _get_yoy(agency_yoy_df, COL_AGENCY, agency_std, "regular_hours")
+
+    s1, s2, s3, s4 = st.columns(4)
+    s1.metric(
+        "Median Salary (Title)",
+        f"${float(ref['median_salary_by_title']):,.0f}",
+        delta=f"{title_growth:+.1f}% ({yoy_label})"
+        if title_growth is not None
+        else None,
+    )
+    s2.metric(
+        "Median Salary (Agency)",
+        f"${float(ref['median_salary_by_agency']):,.0f}",
+        delta=f"{agency_growth:+.1f}% ({yoy_label})"
+        if agency_growth is not None
+        else None,
+    )
+    s3.metric(
+        "Employees in This Role",
+        f"{int(ref['agency_title_count']):,}",
+        delta=f"{headcount_growth:+.1f}% ({yoy_label})"
+        if headcount_growth is not None
+        else None,
+    )
+    s4.metric(
+        "Typical Hours / Year",
+        f"{int(ref.get('regular_hours', 1820)):,}",
+        delta=f"{hours_growth:+.1f}% ({yoy_label})"
+        if hours_growth is not None
+        else None,
+    )
+
+    # ── B. Prediction ────────────────────────────────────────────────────────
+    if predictor is None:
+        st.info("No trained model found. Showing reference-based estimate only.")
+        predicted = float(ref["median_salary_by_title"])
+    else:
+        try:
+            salary_preds, _ = predictor.predict(input_df)
+            predicted = float(salary_preds[0])
+        except Exception as e:
+            st.error(f"Prediction failed: {e}")
+            st.stop()
+
+    median_title = float(ref["median_salary_by_title"])
+
+    st.subheader("Salary Trajectory")
+    st.caption(f"{agency.title()} | {tenure} year(s) in role")
+
+    st.metric("Predicted Salary (2024)", f"${predicted:,.0f}")
+    st.caption(
+        ":information_source: The model was trained on years of service as a proxy for tenure. "
+        "In the underlying data, longer tenure correlates with lower salaries in some roles — "
+        "this is a known model limitation, not a prediction error."
+    )
+
+    # Build historical series for this title/agency from yoy_summary
+    hist_rows = []
+    hist_std = 0.0
+    if yoy_df is not None:
+        hist_slice = yoy_df[
+            (yoy_df[COL_JOB_TITLE] == title_std) & (yoy_df[COL_AGENCY] == agency_std)
+        ].sort_values("fiscal_year")
+        hist_rows = (
+            hist_slice[["fiscal_year", COL_SALARY]]
+            .rename(columns={COL_SALARY: "salary"})
+            .assign(kind="Historical Median")
+            .to_dict("records")
+        )
+        # Std dev of historical salaries — used to seed the confidence band width
+        hist_std = (
+            float(hist_slice[COL_SALARY].std())
+            if len(hist_slice) > 1
+            else predicted * 0.10
+        )
+
+    # Compute average YoY growth rate from historical data
+    if len(hist_rows) >= 2:
+        salaries = [r["salary"] for r in hist_rows]
+        years = [r["fiscal_year"] for r in hist_rows]
+        n_periods = years[-1] - years[0]
+        avg_growth = (
+            (salaries[-1] / salaries[0]) ** (1 / n_periods) - 1
+            if n_periods > 0
+            else 0.02
+        )
+    else:
+        avg_growth = 0.02
+        hist_std = predicted * 0.10
+
+    # Project 5 years forward; confidence band widens with time (uncertainty compounds)
+    projection_rows = []
+    band_rows = []
+    base_year = YEAR_MAX
+    base_salary = predicted
+    for i in range(1, 6):
+        proj_sal = base_salary * ((1 + avg_growth) ** i)
+        # Band grows proportionally to sqrt(i) to reflect compounding uncertainty
+        spread = hist_std * (i**0.5)
+        projection_rows.append(
+            {"fiscal_year": base_year + i, "salary": proj_sal, "kind": "Projected"}
+        )
+        band_rows.append(
+            {
+                "fiscal_year": base_year + i,
+                "upper": proj_sal + spread,
+                "lower": proj_sal - spread,
+            }
+        )
+
+    # Anchor connecting historical → projection (no band at year 0 — we have an actual prediction)
+    anchor = [{"fiscal_year": YEAR_MAX, "salary": predicted, "kind": "Projected"}]
+    anchor_band = [{"fiscal_year": YEAR_MAX, "upper": predicted, "lower": predicted}]
+
+    chart_data = pd.DataFrame(hist_rows + anchor + projection_rows)
+    band_data = pd.DataFrame(anchor_band + band_rows)
+
+    # Overall title median across all agencies (comparison reference)
+    overall_median_rows = []
+    if yoy_df is not None:
+        overall_median_rows = (
+            yoy_df[yoy_df[COL_JOB_TITLE] == title_std]
+            .groupby("fiscal_year")["base_salary"]
             .median()
             .reset_index()
-            .rename(columns={COL_SALARY: "Median Salary"})
+            .rename(columns={"base_salary": "salary"})
+            .assign(kind="Overall Title Median")
+            .to_dict("records")
         )
 
-        trend = (
-            alt.Chart(trend_df)
-            .mark_line(point=True, color="#ff7f0e")
+    overall_df = pd.DataFrame(overall_median_rows)
+
+    if not chart_data.empty:
+        all_salaries = (
+            list(chart_data["salary"])
+            + list(band_data["lower"])
+            + list(band_data["upper"])
+        )
+        if not overall_df.empty:
+            all_salaries += list(overall_df["salary"])
+        y_min = min(all_salaries) * 0.90
+        y_max = max(all_salaries) * 1.10
+        y_scale = alt.Scale(domain=[y_min, y_max], zero=False)
+        y_enc = alt.Y(
+            "salary:Q",
+            title="Median Base Salary ($)",
+            scale=y_scale,
+            axis=alt.Axis(format="$,.0f"),
+        )
+        x_enc = alt.X("fiscal_year:O", title="Fiscal Year")
+
+        hist_df = chart_data[chart_data["kind"] == "Historical Median"]
+        proj_df = chart_data[chart_data["kind"] == "Projected"]
+
+        overall_line = (
+            alt.Chart(overall_df)
+            .mark_line(color="#666688", strokeWidth=1.5, strokeDash=[2, 2], opacity=0.7)
             .encode(
-                alt.X(f"{COL_FISCAL_YEAR}:O", title="Fiscal Year"),
-                alt.Y(
-                    "Median Salary:Q",
-                    title="Median Base Salary ($)",
-                    axis=alt.Axis(format="$,.0f"),
-                    scale=alt.Scale(zero=False),
-                ),
+                x=x_enc,
+                y=alt.Y("salary:Q", scale=y_scale),
                 tooltip=[
-                    alt.Tooltip(f"{COL_FISCAL_YEAR}:O", title="Year"),
+                    alt.Tooltip("fiscal_year:O", title="Year"),
                     alt.Tooltip(
-                        "Median Salary:Q", title="Median Salary", format="$,.0f"
+                        "salary:Q", title="Overall Title Median", format="$,.0f"
                     ),
                 ],
             )
-            .properties(height=280)
-        )
-        st.altair_chart(trend, width="stretch")
-
-        st.divider()
-
-        # Year-over-Year Growth
-        st.subheader("Year-over-Year Growth")
-
-        title_growth = compute_yoy_growth(
-            df, COL_JOB_TITLE, COL_SALARY, COL_FISCAL_YEAR,
-            latest_year=YEAR_MAX, prev_year=YEAR_MAX - 1,
-        )
-        title_pct = title_growth.get(selected_title)
-        if title_pct is not None and not (title_pct != title_pct):  # not NaN
-            st.metric(
-                label=f"Median Salary Growth — {selected_title}",
-                value=f"{title_pct:+.1f}%",
-                delta=f"vs {YEAR_MAX - 1}",
-            )
-        else:
-            st.caption("Insufficient data to compute YoY growth for this title.")
-
-        agency_growth = compute_yoy_growth(
-            df[df[COL_JOB_TITLE] == selected_title],
-            COL_AGENCY, COL_SALARY, COL_FISCAL_YEAR,
-            latest_year=YEAR_MAX, prev_year=YEAR_MAX - 1,
-        ).dropna().sort_values(ascending=False)
-
-        if not agency_growth.empty:
-            st.caption(f"Median salary growth by agency for **{selected_title}** ({YEAR_MAX - 1} → {YEAR_MAX})")
-            agency_growth_df = agency_growth.reset_index()
-            agency_growth_df.columns = ["Agency", "% Change"]
-            agency_bar = (
-                alt.Chart(agency_growth_df.head(10))
-                .mark_bar()
-                .encode(
-                    alt.X("% Change:Q", title="% Change in Median Salary", axis=alt.Axis(format="+.1f")),
-                    alt.Y("Agency:N", sort="-x", title=None),
-                    alt.Color(
-                        "% Change:Q",
-                        scale=alt.Scale(scheme="redyellowgreen", domainMid=0),
-                        legend=None,
-                    ),
-                    tooltip=[
-                        alt.Tooltip("Agency:N", title="Agency"),
-                        alt.Tooltip("% Change:Q", title="% Change", format="+.1f"),
-                    ],
-                )
-                .properties(height=max(200, len(agency_growth_df.head(10)) * 28))
-            )
-            st.altair_chart(agency_bar, width="stretch")
-
-        st.divider()
-
-        # Choropleth map of boroughs
-        st.subheader("Median Salary by Borough")
-
-        BOROUGH_COORDS: dict[str, tuple[float, float]] = {
-            "MANHATTAN": (40.7831, -73.9712),
-            "BROOKLYN": (40.6782, -73.9442),
-            "QUEENS": (40.7282, -73.7949),
-            "BRONX": (40.8448, -73.8648),
-            "STATEN ISLAND": (40.5795, -74.1502),
-        }
-
-        borough_agg = (
-            filtered.groupby(COL_BOROUGH)[COL_SALARY]
-            .median()
-            .reset_index()
-            .rename(columns={COL_SALARY: "median_salary"})
-        )
-        borough_agg["lat"] = borough_agg[COL_BOROUGH].map(
-            lambda x: BOROUGH_COORDS.get(x, (40.7128, -74.0060))[0]
-        )
-        borough_agg["lon"] = borough_agg[COL_BOROUGH].map(
-            lambda x: BOROUGH_COORDS.get(x, (40.7128, -74.0060))[1]
-        )
-        borough_agg["color"] = borough_agg[COL_BOROUGH].map(
-            lambda x: BOROUGH_COLORS_RGBA.get(x, [128, 128, 128, 200])
         )
 
-        sal_min = borough_agg["median_salary"].min()
-        sal_max = borough_agg["median_salary"].max()
-        scale_range = sal_max - sal_min if sal_max != sal_min else 1
-        borough_agg["radius"] = (
-            1000 + 7200 * (borough_agg["median_salary"] - sal_min) / scale_range
-        )
-
-        layer = pdk.Layer(
-            "ScatterplotLayer",
-            data=borough_agg,
-            get_position="[lon, lat]",
-            get_radius="radius",
-            get_fill_color="color",
-            pickable=True,
-        )
-
-        view_state = pdk.ViewState(
-            latitude=40.7128,
-            longitude=-74.0060,
-            zoom=9,
-            pitch=0,
-        )
-
-        tooltip = {
-            "html": "<b>{"
-            + COL_BOROUGH
-            + "}</b><br/>Median Salary: ${median_salary:,.0f}",
-            "style": {"backgroundColor": "steelblue", "color": "white"},
-        }
-
-        st.pydeck_chart(
-            pdk.Deck(
-                layers=[layer],
-                initial_view_state=view_state,
-                tooltip=tooltip,  # type: ignore[arg-type]
-                map_style="light",
+        hist_line = (
+            alt.Chart(hist_df)
+            .mark_line(point=True, color="#80cbc4", strokeWidth=2)
+            .encode(
+                x=x_enc,
+                y=y_enc,
+                tooltip=[
+                    alt.Tooltip("fiscal_year:O", title="Year"),
+                    alt.Tooltip("salary:Q", title="This Agency Median", format="$,.0f"),
+                ],
             )
         )
 
-        display_cols = {COL_BOROUGH: "Borough", "median_salary": "Median Salary ($)"}
-        summary_tbl = borough_agg[[COL_BOROUGH, "median_salary"]].rename(
-            columns=display_cols
-        )
-        summary_tbl["Median Salary ($)"] = summary_tbl["Median Salary ($)"].map(
-            "${:,.0f}".format
-        )
-        st.dataframe(
-            summary_tbl.style.set_table_styles(
-                [
-                    {
-                        "selector": "th",
-                        "props": [
-                            ("background-color", "#2d3748"),
-                            ("color", "#f0f0f0"),
-                        ],
-                    }
-                ]
-            ),
-            width="stretch",
-            hide_index=True,
+        ci_band = (
+            alt.Chart(band_data)
+            .mark_area(color="#e8a830", opacity=0.15)
+            .encode(
+                x=alt.X("fiscal_year:O"),
+                y=alt.Y("upper:Q", scale=y_scale),
+                y2="lower:Q",
+            )
         )
 
-
-# Data Dictionary tab
-with dict_tab:
-    st.subheader("Data Dictionary")
-
-    data_dict = load_data_dictionary()
-
-    if data_dict is None:
-        st.info(
-            "No data dictionary found. Add a CSV file at `references/data_dictionary.csv` "
-            "with columns: `column_name`, `data_type`, `description`, `example`."
+        proj_line = (
+            alt.Chart(proj_df)
+            .mark_line(point=True, color="#e8a830", strokeWidth=2, strokeDash=[5, 3])
+            .encode(
+                x=x_enc,
+                y=alt.Y("salary:Q", scale=y_scale),
+                tooltip=[
+                    alt.Tooltip("fiscal_year:O", title="Year"),
+                    alt.Tooltip("salary:Q", title="Projected Salary", format="$,.0f"),
+                ],
+            )
         )
-    else:
-        search = st.text_input("Search columns", placeholder="e.g. salary, borough...")
-        if search:
-            mask = data_dict.apply(
-                lambda col: col.astype(str).str.contains(search, case=False)
-            ).any(axis=1)
-            data_dict = data_dict[mask]
 
-        st.dataframe(data_dict, width="stretch", hide_index=True)
+        layers = (
+            [overall_line, hist_line, ci_band, proj_line]
+            if not overall_df.empty
+            else [hist_line, ci_band, proj_line]
+        )
+
+        trajectory = (
+            alt.layer(*layers).properties(height=320).configure_view(strokeOpacity=0)
+        )
+        st.altair_chart(trajectory, use_container_width=True)
+        st.caption(
+            f"Teal: this agency's median. "
+            f"Gray dashed: overall median across all agencies for this title. "
+            f"Amber: projected at {avg_growth * 100:.1f}% avg annual growth with uncertainty band."
+        )
+
 
 st.caption(APP_DISCLAIMER)
