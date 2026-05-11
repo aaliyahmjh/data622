@@ -11,7 +11,6 @@ from pathlib import Path
 # 🔒 FIXED: Use relative imports
 from .paths import MODELS_DIR
 from .dataset import load_salary_data, filter_model_population, add_tenure_proxy, split_by_year
-from .features import transform_with_stats
 
 
 class SalaryPredictor:
@@ -34,9 +33,6 @@ class SalaryPredictor:
             print("⚠️  Warning: No feature statistics found in model. Predictions may have data leakage.")
     
     def predict(self, df, apply_feature_stats=True):
-        if apply_feature_stats and self.feature_stats is not None:
-            df = transform_with_stats(df, self.feature_stats)
-        
         X = df[self.feature_cols].copy()
         X_processed = self.preprocessor.transform(X)
         log_predictions = self.model.predict(X_processed)
