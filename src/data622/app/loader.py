@@ -41,7 +41,7 @@ def load_yoy_summary() -> pd.DataFrame | None:
     historical chart has no gap before the projection.
     Returns median base_salary grouped by fiscal_year, title_std, agency_std.
     """
-    cols = ["fiscal_year", "title_std", "agency_std", "base_salary", "regular_hours_x"]
+    cols = ["fiscal_year", "title_std", "agency_std", "base_salary", "regular_hours"]
     frames = []
     for path in (TRAIN_SET_FILE, VALID_SET_FILE, TEST_SET_FILE):
         if Path(path).exists():
@@ -54,7 +54,7 @@ def load_yoy_summary() -> pd.DataFrame | None:
         .agg(
             base_salary=("base_salary", "median"),
             headcount=("base_salary", "count"),
-            regular_hours=("regular_hours_x", "median"),
+            regular_hours=("regular_hours", "median"),
         )
         .reset_index()
     )

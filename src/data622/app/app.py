@@ -170,6 +170,7 @@ if predict_clicked:
         "tenure_years": int(tenure),
         "title_frequency": title_freq,
         "agency_size": agency_sz,
+        "title_avg_salary": float(ref["median_salary_by_title"]),
         "median_salary_by_title": float(ref["median_salary_by_title"]),
         "median_salary_by_agency": float(ref["median_salary_by_agency"]),
         "count_of_job_titles": float(ref.get("count_of_job_titles", 1)),
