@@ -340,28 +340,12 @@ if predict_clicked:
         chart_data = pd.DataFrame(hist_rows + anchor + projection_rows)
         band_data = pd.DataFrame(anchor_band + band_rows)
 
-        overall_median_rows = []
-        if yoy_df is not None:
-            overall_median_rows = (
-                yoy_df[yoy_df[COL_JOB_TITLE] == title_std]
-                .groupby("fiscal_year")["base_salary"]
-                .median()
-                .reset_index()
-                .rename(columns={"base_salary": "salary"})
-                .assign(kind="Overall Title Median")
-                .to_dict("records")
-            )
-
-        overall_df = pd.DataFrame(overall_median_rows)
-
         if not chart_data.empty:
             all_salaries = (
                 list(chart_data["salary"])
                 + list(band_data["lower"])
                 + list(band_data["upper"])
             )
-            if not overall_df.empty:
-                all_salaries += list(overall_df["salary"])
             y_min = min(all_salaries) * 0.90
             y_max = max(all_salaries) * 1.10
             y_scale = alt.Scale(domain=[y_min, y_max], zero=False)
@@ -376,21 +360,6 @@ if predict_clicked:
             hist_df = chart_data[chart_data["kind"] == "Historical Median"]
             proj_df = chart_data[chart_data["kind"] == "Projected"]
 
-            overall_line = (
-                alt.Chart(overall_df)
-                .mark_line(color="#666688", strokeWidth=1.5, strokeDash=[2, 2], opacity=0.7)
-                .encode(
-                    x=x_enc,
-                    y=alt.Y("salary:Q", scale=y_scale),
-                    tooltip=[
-                        alt.Tooltip("fiscal_year:O", title="Year"),
-                        alt.Tooltip(
-                            "salary:Q", title="Overall Title Median", format="$,.0f"
-                        ),
-                    ],
-                )
-            )
-
             hist_line = (
                 alt.Chart(hist_df)
                 .mark_line(point=True, color="#80cbc4", strokeWidth=2)
@@ -399,7 +368,7 @@ if predict_clicked:
                     y=y_enc,
                     tooltip=[
                         alt.Tooltip("fiscal_year:O", title="Year"),
-                        alt.Tooltip("salary:Q", title="This Agency Median", format="$,.0f"),
+                        alt.Tooltip("salary:Q", title="Agency & Title Median", format="$,.0f"),
                     ],
                 )
             )
@@ -427,19 +396,14 @@ if predict_clicked:
                 )
             )
 
-            layers = (
-                [overall_line, hist_line, ci_band, proj_line]
-                if not overall_df.empty
-                else [hist_line, ci_band, proj_line]
-            )
-
             trajectory = (
-                alt.layer(*layers).properties(height=320).configure_view(strokeOpacity=0)
+                alt.layer(hist_line, ci_band, proj_line)
+                .properties(height=320)
+                .configure_view(strokeOpacity=0)
             )
             st.altair_chart(trajectory, use_container_width=True)
             st.caption(
-                f"Teal: this agency's median. "
-                f"Gray dashed: overall median across all agencies for this title. "
+                f"Teal: median salary for {job_title.title()} at {agency.title()}. "
                 f"Amber: projected at {avg_growth * 100:.1f}% avg annual growth with uncertainty band."
             )
 
