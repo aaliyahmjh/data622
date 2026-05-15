@@ -6,11 +6,15 @@ __pycache__/
 # C extensions
 *.so
 
+# Large unused model files
+models/salary_model_rf.pkl
+
 # Raw data files
 /data/raw/
 *.csv
-# Exception: keep the reference table
+# Exception: keep the reference table and pre-computed derived files
 !data/processed/reference_table.csv
+!data/processed/yoy_summary.csv
 
 # macOS
 .DS_Store
