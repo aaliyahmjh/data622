@@ -20,7 +20,10 @@ def load_model() -> SalaryPredictor | None:
     path = Path(MODEL_FILE)
     if not path.exists():
         return None
-    return SalaryPredictor(path)
+    try:
+        return SalaryPredictor(path)
+    except Exception:
+        return None
 
 
 @st.cache_data(show_spinner="Loading reference table…")
@@ -47,8 +50,11 @@ def load_title_category_map() -> dict[str, str]:
     path = Path(TITLE_CATEGORY_MAP_FILE)
     if not path.exists():
         return {}
-    with open(path) as f:
-        return json.load(f)
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 @st.cache_data(show_spinner="Loading data dictionary…")

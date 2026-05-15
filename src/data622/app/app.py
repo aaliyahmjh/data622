@@ -190,6 +190,8 @@ if predict_clicked:
         # Compute YoY deltas to show as metric deltas
         title_growth: float | None = None
         agency_growth: float | None = None
+        headcount_growth: float | None = None
+        hours_growth: float | None = None
         yoy_label = ""
         if yoy_df is not None:
             latest_year = int(yoy_df["fiscal_year"].max())
@@ -269,8 +271,6 @@ if predict_clicked:
             except Exception as e:
                 st.error(f"Prediction failed: {e}")
                 st.stop()
-
-        median_title = float(ref["median_salary_by_title"])
 
         st.subheader("Salary Trajectory")
         st.caption(f"{agency.title()} | {tenure} year(s) in role")
