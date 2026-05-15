@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# Large unused model files
+models/salary_model_rf.pkl
+
 # Raw data files
 /data/raw/
 *.csv
