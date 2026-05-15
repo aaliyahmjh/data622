@@ -261,7 +261,11 @@ if predict_clicked:
         else:
             try:
                 salary_preds, _ = predictor.predict(input_df)
-                predicted = float(salary_preds[0])
+                raw_prediction = float(salary_preds[0])
+                hist_median = float(ref["median_salary_by_title"])
+                if predictor.feature_stats is not None and title_std in predictor.feature_stats.get("title_avg_salary", {}):
+                    hist_median = float(predictor.feature_stats["title_avg_salary"][title_std])
+                predicted = 0.70 * raw_prediction + 0.30 * hist_median
             except Exception as e:
                 st.error(f"Prediction failed: {e}")
                 st.stop()
