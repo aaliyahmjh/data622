@@ -6,9 +6,8 @@ from data622.paths import (
 
 # Processed Data files
 REFERENCE_TABLE_FILE = PROCESSED_DATA_DIR / "reference_table.csv"
-TRAIN_SET_FILE = PROCESSED_DATA_DIR / "train_set.csv"
-VALID_SET_FILE = PROCESSED_DATA_DIR / "valid_set.csv"
-TEST_SET_FILE = PROCESSED_DATA_DIR / "test_set.csv"
+YOY_SUMMARY_FILE = PROCESSED_DATA_DIR / "yoy_summary.csv"
+TITLE_CATEGORY_MAP_FILE = PROCESSED_DATA_DIR / "title_category_map.json"
 
 # Model file
 MODEL_FILE = MODELS_DIR / "salary_model_linear.pkl"
